@@ -39,5 +39,11 @@
     "react-dom": "^18.3.1",
     "tinacms": "^3.8.2",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "vite": "^7.3.2",
+    "@tinacms/cli": {
+      "vite": "^4.5.9"
+    }
   }
 }
