@@ -43,6 +43,21 @@ pnpm dev
 
 `react` and `react-dom@^18.3.1` are pinned in `devDependencies` for the TinaCMS admin UI build only — the site itself ships zero React. Without the pin, pnpm resolves `react@19` against `react-dom@18` and the admin crashes on init. This is tracked in [tinacms#6985](https://github.com/tinacms/tinacms/issues/6985); remove the pin once that lands.
 
+## Deploy
+
+This site is built with the [`@astrojs/vercel`](https://docs.astro.build/en/guides/integrations-guide/vercel/) adapter and a [`vercel.json`](./vercel.json) that runs `npm run build:local`. To deploy with the [Vercel CLI](https://vercel.com/docs/cli):
+
+```bash
+vercel link --yes          # link (or create) the Vercel project
+vercel deploy --prod       # build and ship to production
+```
+
+Live deployment: <https://armada-blog.vercel.app>
+
+The production build uses `npm run build:local` (`tinacms build --content=local`), which renders content straight from the files in `src/content/` and **requires no TinaCloud credentials**. The `TINA_CLIENT_ID` and `TINA_TOKEN` environment variables are only needed to enable the in-production visual editing UI at `/admin` — set them in your Vercel project settings if you want editors to manage content on the live site.
+
+> New to Vercel? The Astro adapter is already wired in `astro.config.mjs`, so a fresh `vercel link` + `vercel deploy --prod` is all it takes.
+
 ## Want to learn more?
 
 Read the [TinaCMS documentation](https://tina.io/docs) and the [Astro documentation](https://docs.astro.build), or come and say hello in the [TinaCMS Discord server](https://discord.gg/cG2UNREu).
