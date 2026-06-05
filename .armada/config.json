@@ -3,9 +3,11 @@
   "dispatch": "shipwright",
   "baseBranch": "main",
   "authors": "",
-  "autoMerge": false,
+  "autoMerge": true,
   "mergeMethod": "squash",
   "maxReviewRounds": 2,
+  "maxConcurrentBuilds": 3,
+  "maxConcurrentReviews": 3,
   "armadaRepo": "calumjs/ARMADA",
   "autoArmSelfFixes": false,
   "commands": {
