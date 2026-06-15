@@ -11,13 +11,20 @@ const themes = [
 	{ id: 'storm', label: 'Tempest watch', icon: 'tabler:bolt' },
 	{ id: 'tropical', label: 'Tropical lagoon', icon: 'tabler:sun-high' },
 ];
+
+// SSR/no-JS fallback: with JS disabled the picker's active marker is set by the
+// inline script below, so server-render the SSR default ('light' — matches
+// BaseHead.astro's resolve() fallback) as checked so a themed-but-script-less
+// page still indicates an active option. The script reconciles this with the
+// persisted theme as soon as it runs.
+const ssrDefaultTheme = 'light';
 ---
 <div class="relative" data-theme-menu>
 	<button
 		data-theme-toggle
 		type="button"
 		aria-label="Choose colour theme"
-		aria-haspopup="menu"
+		aria-haspopup="true"
 		aria-expanded="false"
 		class="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none"
 	>
@@ -25,7 +32,7 @@ const themes = [
 	</button>
 	<div
 		data-theme-panel
-		role="menu"
+		role="radiogroup"
 		aria-label="Colour theme"
 		hidden
 		class="absolute right-0 z-30 mt-2 min-w-44 overflow-hidden rounded-md border bg-popover py-1 text-popover-foreground shadow-lg"
@@ -33,14 +40,14 @@ const themes = [
 		{themes.map((theme) => (
 			<button
 				type="button"
-				role="menuitemradio"
-				aria-checked="false"
+				role="radio"
+				aria-checked={theme.id === ssrDefaultTheme ? 'true' : 'false'}
 				data-theme-option={theme.id}
 				class="flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground aria-checked:font-semibold aria-checked:text-primary outline-none focus-visible:bg-accent"
 			>
 				<Icon name={theme.icon} class="size-4 shrink-0" aria-hidden="true" />
 				<span class="flex-1">{theme.label}</span>
-				<Icon name="tabler:check" class="size-4 shrink-0 opacity-0 aria-hidden:opacity-0" data-theme-check />
+				<Icon name="tabler:check" class={`size-4 shrink-0 ${theme.id === ssrDefaultTheme ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" data-theme-check />
 			</button>
 		))}
 	</div>
@@ -122,7 +129,15 @@ const themes = [
 		});
 
 		document.addEventListener('keydown', function (e) {
-			if (e.key === 'Escape') closeAll();
+			if (e.key !== 'Escape') return;
+			// Restore focus to the toggle of any open menu before closing, so a
+			// keyboard user isn't dropped back to the document on Escape.
+			document.querySelectorAll('[data-theme-menu]').forEach(function (m) {
+				var btn = m.querySelector('[data-theme-toggle]');
+				var panel = m.querySelector('[data-theme-panel]');
+				if (btn && panel && !panel.hidden) btn.focus();
+			});
+			closeAll();
 		});
 
 		// Keep checkmarks accurate after no-flash apply and route swaps.

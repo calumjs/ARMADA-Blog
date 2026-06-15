@@ -133,7 +133,6 @@
 
 /* Storm — "tempest watch": a dramatic dark squall of cold steel-slate seas,
    pale sea-spray ink, and a charged lightning-cyan primary. Dark-derived. */
-.dark[data-theme='storm'],
 [data-theme='storm'] {
 	--background: oklch(0.21 0.022 250);          /* slate storm sea */
 	--foreground: oklch(0.95 0.012 240);          /* pale sea-spray */
