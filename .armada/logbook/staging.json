@@ -1,0 +1,35 @@
+{
+  "surface": "web",
+  "note": "Real recorded walkthrough of the RUNNING app. Every chapter is actual site footage captured as motion by Playwright (chromium) recordVideo — live navigation, scrolling and hovering — NOT a slide deck and NOT static screenshots. No deck.html. Recorded against the PR's own dev server (npm run dev) so the video reflects that PR's actual changes, narrated via ElevenLabs (calum voice), muxed with ffmpeg.",
+  "launch": {
+    "command": "npm run dev",
+    "readySignal": { "type": "httpUrl", "value": "http://localhost:4321/" },
+    "liveUrl": "https://armada-blog.vercel.app",
+    "env": []
+  },
+  "stage": {
+    "seed": "none — content ships in the repo (src/content)",
+    "entry": "http://localhost:4321/"
+  },
+  "tts": {
+    "provider": "elevenlabs",
+    "model": "eleven_multilingual_v2",
+    "keyEnv": "ELEVENLABS_API_KEY",
+    "voiceIdEnv": "ELEVENLABS_VOICE_ID",
+    "voiceName": "calum"
+  },
+  "tooling": {
+    "ffmpeg": "C:/DataCalumSimpson/ffmpeg-tools/ffmpeg.exe",
+    "capture": "playwright (chromium) recordVideo at 1280x720 — real motion of the running app, NO deck, NO stills-only chapters",
+    "buildDir": "C:/DataCalumSimpson/logbook-build"
+  },
+  "reach": [
+    { "action": "goto", "target": "/" },
+    { "action": "scrollTo", "target": "bottom" },
+    { "action": "scrollTo", "target": "top" },
+    { "action": "goto", "target": "/blog/" },
+    { "action": "scrollTo", "target": "bottom" },
+    { "action": "goto", "target": "/about/" },
+    { "action": "scrollTo", "target": "bottom" }
+  ]
+}
