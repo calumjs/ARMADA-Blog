@@ -11,6 +11,14 @@
   "armadaRepo": "calumjs/ARMADA",
   "autoArmSelfFixes": false,
   "logbook": "all",
+  "publicIntake": {
+    "enabled": true,
+    "authors": "",
+    "autoArm": true,
+    "maxPerTick": 3,
+    "requireDoubleCheck": true,
+    "closeOnCharter": true
+  },
   "commands": {
     "build": "npm run build:local",
     "lint": "npx astro check",
