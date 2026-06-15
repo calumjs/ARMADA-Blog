@@ -334,7 +334,7 @@
 		}
 
 		// ---- Tooltip (hover desktop / tap mobile) ----------------------------
-		function showTooltipAt(clientX, clientY) {
+		function showTooltipAt(clientX) {
 			if (!chartGeom) return;
 			const rect = chartEl.getBoundingClientRect();
 			// Map pointer x into the SVG's 800-wide viewBox coordinate space.
@@ -359,9 +359,9 @@
 		}
 		function hideTooltip() { tooltipEl.classList.add('hidden'); }
 
-		chartWrap.addEventListener('pointermove', (e) => showTooltipAt(e.clientX, e.clientY));
+		chartWrap.addEventListener('pointermove', (e) => showTooltipAt(e.clientX));
 		chartWrap.addEventListener('pointerleave', hideTooltip);
-		chartWrap.addEventListener('pointerdown', (e) => showTooltipAt(e.clientX, e.clientY));
+		chartWrap.addEventListener('pointerdown', (e) => showTooltipAt(e.clientX));
 
 		// ---- Controls --------------------------------------------------------
 		root.querySelectorAll('[data-gold-unit]').forEach((btn) => {
