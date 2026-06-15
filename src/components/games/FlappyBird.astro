@@ -1,0 +1,90 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="flappy"
+	title="Flappy Bird"
+	instructions="Press Space / Up arrow or tap the canvas to flap. Pass through the gaps. Don't hit a pipe or the ground."
+>
+	<canvas
+		id="flappy-canvas"
+		width="320"
+		height="420"
+		class="w-full max-w-[320px] touch-none rounded-md border bg-background"
+	></canvas>
+	<p class="text-sm font-medium">Score: <span id="flappy-score">0</span> · <span id="flappy-status">Tap or press Space to start</span></p>
+	<button id="flappy-reset" class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">Restart</button>
+</GameShell>
+
+<script is:inline>
+	(() => {
+		const canvas = document.getElementById('flappy-canvas');
+		if (!canvas) return;
+		const ctx = canvas.getContext('2d');
+		const W = canvas.width, H = canvas.height;
+		const scoreEl = document.getElementById('flappy-score');
+		const statusEl = document.getElementById('flappy-status');
+		const GAP = 130, PIPE_W = 52, GRAV = 0.5, FLAP = -7.5;
+		let bird, pipes, score, over, started, raf;
+
+		function reset() {
+			bird = { x: 70, y: H / 2, v: 0 };
+			pipes = []; score = 0; over = false; started = false;
+			scoreEl.textContent = '0';
+			statusEl.textContent = 'Tap or press Space to start';
+			draw();
+		}
+		function flap() {
+			if (over) return;
+			if (!started) { started = true; statusEl.textContent = 'Playing…'; loop(); }
+			bird.v = FLAP;
+		}
+		function spawn() {
+			const top = 40 + Math.random() * (H - GAP - 120);
+			pipes.push({ x: W, top, passed: false });
+		}
+		function loop() {
+			if (over || !started) return;
+			bird.v += GRAV; bird.y += bird.v;
+			if (!pipes.length || pipes[pipes.length - 1].x < W - 160) spawn();
+			pipes.forEach((p) => (p.x -= 2.4));
+			pipes = pipes.filter((p) => p.x + PIPE_W > 0);
+			for (const p of pipes) {
+				if (!p.passed && p.x + PIPE_W < bird.x) { p.passed = true; score++; scoreEl.textContent = String(score); }
+				if (bird.x + 12 > p.x && bird.x - 12 < p.x + PIPE_W && (bird.y - 12 < p.top || bird.y + 12 > p.top + GAP)) end();
+			}
+			if (bird.y + 12 > H || bird.y - 12 < 0) end();
+			draw();
+			raf = requestAnimationFrame(loop);
+		}
+		function end() {
+			over = true; started = false;
+			cancelAnimationFrame(raf);
+			statusEl.textContent = 'Game over! Press Restart.';
+		}
+		function draw() {
+			ctx.fillStyle = '#0b1020'; ctx.fillRect(0, 0, W, H);
+			ctx.fillStyle = '#22c55e';
+			pipes.forEach((p) => {
+				ctx.fillRect(p.x, 0, PIPE_W, p.top);
+				ctx.fillRect(p.x, p.top + GAP, PIPE_W, H - p.top - GAP);
+			});
+			ctx.fillStyle = '#f59e0b';
+			ctx.beginPath(); ctx.arc(bird.x, bird.y, 12, 0, Math.PI * 2); ctx.fill();
+			ctx.fillStyle = '#1f2937'; ctx.fillRect(0, H - 6, W, 6);
+		}
+		canvas.setAttribute('tabindex', '0');
+		canvas.addEventListener('keydown', (e) => {
+			if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); flap(); }
+		});
+		canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); canvas.focus(); flap(); });
+		document.getElementById('flappy-reset').addEventListener('click', () => { cancelAnimationFrame(raf); reset(); });
+		// ClientRouter swaps the DOM without a full reload; cancel the RAF loop and mark the
+		// game inactive before the swap so it can't retain the removed game DOM.
+		document.addEventListener('astro:before-swap', () => {
+			over = true; started = false; cancelAnimationFrame(raf);
+		}, { once: true });
+		reset();
+	})();
+</script>

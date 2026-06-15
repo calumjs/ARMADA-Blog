@@ -1,0 +1,95 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="tictactoe"
+	title="Tic-Tac-Toe"
+	instructions="Click/tap a square to place your X. You play against an unbeatable AI (O) — the best you can do is force a draw. Get three in a row to win."
+>
+	<div id="ttt-board" class="grid grid-cols-3 gap-2 select-none" style="width:12rem"></div>
+	<p class="text-sm font-medium" id="ttt-status">Your turn (X)</p>
+	<p class="text-xs text-muted-foreground">You: <span id="ttt-wins">0</span> · AI: <span id="ttt-losses">0</span> · Draws: <span id="ttt-draws">0</span></p>
+	<button id="ttt-reset" class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">New round</button>
+</GameShell>
+
+<script is:inline>
+	(() => {
+		const board = document.getElementById('ttt-board');
+		if (!board) return;
+		const statusEl = document.getElementById('ttt-status');
+		const winsEl = document.getElementById('ttt-wins');
+		const lossesEl = document.getElementById('ttt-losses');
+		const drawsEl = document.getElementById('ttt-draws');
+		const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+		let cells, board_, over, aiPending, aiTimer, wins = 0, losses = 0, draws = 0;
+
+		function reset() {
+			// Cancel any AI move still pending from the previous round so it can't drop an O
+			// onto the fresh board after reset.
+			clearTimeout(aiTimer); aiPending = false;
+			board_ = Array(9).fill('');
+			over = false;
+			statusEl.textContent = 'Your turn (X)';
+			board.innerHTML = '';
+			cells = [];
+			for (let i = 0; i < 9; i++) {
+				const b = document.createElement('button');
+				b.className = 'flex aspect-square items-center justify-center rounded-md border bg-card text-2xl font-bold';
+				b.addEventListener('click', () => play(i));
+				board.appendChild(b); cells[i] = b;
+			}
+		}
+		function winner(bd) {
+			for (const [a, b, c] of LINES)
+				if (bd[a] && bd[a] === bd[b] && bd[a] === bd[c]) return bd[a];
+			return bd.every((v) => v) ? 'draw' : null;
+		}
+		function play(i) {
+			// Reject clicks on a finished/occupied board, and while the AI's move is pending —
+			// otherwise the player could stack several X marks during the ~300ms AI delay.
+			if (over || aiPending || board_[i]) return;
+			board_[i] = 'X'; cells[i].textContent = 'X'; cells[i].style.color = '#0ea5e9';
+			let w = winner(board_);
+			if (w) return finish(w);
+			statusEl.textContent = 'AI thinking…';
+			aiPending = true;
+			aiTimer = setTimeout(aiMove, 300);
+		}
+		function aiMove() {
+			aiPending = false;
+			if (over) return;
+			const move = best(board_, 'O').index;
+			if (move != null) { board_[move] = 'O'; cells[move].textContent = 'O'; cells[move].style.color = '#ef4444'; }
+			const w = winner(board_);
+			if (w) return finish(w);
+			statusEl.textContent = 'Your turn (X)';
+		}
+		function best(bd, player) {
+			const avail = bd.map((v, i) => (v ? null : i)).filter((v) => v != null);
+			const w = winner(bd);
+			if (w === 'O') return { score: 10 };
+			if (w === 'X') return { score: -10 };
+			if (w === 'draw') return { score: 0 };
+			const moves = [];
+			for (const i of avail) {
+				const copy = bd.slice(); copy[i] = player;
+				const score = best(copy, player === 'O' ? 'X' : 'O').score;
+				moves.push({ index: i, score });
+			}
+			if (player === 'O') return moves.reduce((a, b) => (b.score > a.score ? b : a));
+			return moves.reduce((a, b) => (b.score < a.score ? b : a));
+		}
+		function finish(w) {
+			over = true;
+			if (w === 'X') { wins++; winsEl.textContent = String(wins); statusEl.textContent = 'You win! 🎉'; }
+			else if (w === 'O') { losses++; lossesEl.textContent = String(losses); statusEl.textContent = 'AI wins.'; }
+			else { draws++; drawsEl.textContent = String(draws); statusEl.textContent = "It's a draw."; }
+		}
+		document.getElementById('ttt-reset').addEventListener('click', reset);
+		// ClientRouter swaps the DOM without a full reload; cancel any pending AI move before
+		// the swap so its callback can't fire against the removed board.
+		document.addEventListener('astro:before-swap', () => { clearTimeout(aiTimer); aiPending = false; }, { once: true });
+		reset();
+	})();
+</script>

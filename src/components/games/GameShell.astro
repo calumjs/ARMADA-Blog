@@ -1,0 +1,25 @@
+---
+// A consistent presentation shell for each self-contained game.
+// Renders a titled card with an instructions line and a slot for the
+// game's own markup + inline script. Each game is fully client-side.
+interface Props {
+	id: string;
+	title: string;
+	instructions: string;
+}
+
+const { id, title, instructions } = Astro.props;
+---
+
+<section
+	id={id}
+	class="flex scroll-mt-24 flex-col gap-4 rounded-xl border bg-card p-5 text-card-foreground shadow-sm"
+>
+	<header class="flex flex-col gap-1">
+		<h2 class="text-xl font-semibold tracking-tight">{title}</h2>
+		<p class="text-sm text-muted-foreground">{instructions}</p>
+	</header>
+	<div class="flex flex-1 flex-col items-center gap-3">
+		<slot />
+	</div>
+</section>

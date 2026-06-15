@@ -17,6 +17,10 @@
     {
       "title": "About",
       "link": "/about"
+    },
+    {
+      "title": "Games",
+      "link": "/games"
     }
   ],
   "contactLinks": [
