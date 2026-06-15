@@ -55,6 +55,7 @@ import GameShell from './GameShell.astro';
 				if (ball.x > bx && ball.x < bx + BW - 2 && ball.y > by && ball.y < by + BH) {
 					b.alive = false; ball.dy *= -1; score += 10; scoreEl.textContent = String(score);
 					if (bricks.every((br) => !br.alive)) { over = true; statusEl.textContent = 'You cleared it! 🎉'; }
+					break; // one bounce per frame — stops the ball tunnelling through two bricks at once
 				}
 			}
 			if (ball.y > H) {
@@ -87,6 +88,11 @@ import GameShell from './GameShell.astro';
 		canvas.addEventListener('touchmove', (e) => { e.preventDefault(); pointerMove(e); }, { passive: false });
 		canvas.addEventListener('pointerdown', () => { canvas.focus(); start(); });
 		document.getElementById('breakout-reset').addEventListener('click', () => { cancelAnimationFrame(raf); reset(); });
+		// ClientRouter (<ClientRouter />) swaps the DOM without a full reload; tear the
+		// RAF loop down before the swap so it can't keep drawing to a detached canvas.
+		document.addEventListener('astro:before-swap', () => {
+			over = true; started = false; cancelAnimationFrame(raf);
+		}, { once: true });
 		reset();
 	})();
 </script>

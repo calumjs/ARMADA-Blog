@@ -135,13 +135,24 @@ import GameShell from './GameShell.astro';
 		canvas.addEventListener('keydown', (e) => {
 			const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'rotate', ArrowDown: 'down', ' ': 'drop' };
 			if (map[e.key]) { e.preventDefault(); action(map[e.key]); }
-			else if (e.key === 'p' || e.key === 'P') { started = !started && !over ? true : false; statusEl.textContent = started ? 'Playing…' : 'Paused'; }
+			else if (e.key === 'p' || e.key === 'P') {
+				if (!over) {
+					started = !started;
+					statusEl.textContent = started ? 'Playing…' : 'Paused';
+					// Stop/restart the drop interval so a paused board genuinely freezes.
+					clearInterval(dropTimer);
+					if (started) dropTimer = setInterval(tick, 600);
+				}
+			}
 		});
 		canvas.setAttribute('tabindex', '0');
 		canvas.addEventListener('pointerdown', () => canvas.focus());
 		document.querySelectorAll('[data-tetris-btn]').forEach((b) =>
 			b.addEventListener('click', () => action(b.getAttribute('data-tetris-btn'))));
 		document.getElementById('tetris-reset').addEventListener('click', () => { clearInterval(dropTimer); reset(); dropTimer = setInterval(tick, 600); });
+		// ClientRouter swaps the DOM without a full reload; clear the drop interval before the
+		// swap so it stops firing against the removed games page (and can't stack on re-entry).
+		document.addEventListener('astro:before-swap', () => { clearInterval(dropTimer); }, { once: true });
 		reset();
 		dropTimer = setInterval(tick, 600);
 	})();

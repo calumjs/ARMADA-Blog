@@ -80,6 +80,11 @@ import GameShell from './GameShell.astro';
 		});
 		canvas.addEventListener('pointerdown', (e) => { e.preventDefault(); canvas.focus(); flap(); });
 		document.getElementById('flappy-reset').addEventListener('click', () => { cancelAnimationFrame(raf); reset(); });
+		// ClientRouter swaps the DOM without a full reload; cancel the RAF loop and mark the
+		// game inactive before the swap so it can't retain the removed game DOM.
+		document.addEventListener('astro:before-swap', () => {
+			over = true; started = false; cancelAnimationFrame(raf);
+		}, { once: true });
 		reset();
 	})();
 </script>

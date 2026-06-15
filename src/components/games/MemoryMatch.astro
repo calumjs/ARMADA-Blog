@@ -20,9 +20,12 @@ import GameShell from './GameShell.astro';
 		const movesEl = document.getElementById('mem-moves');
 		const pairsEl = document.getElementById('mem-pairs');
 		const statusEl = document.getElementById('mem-status');
-		let deck, first, lock, moves, pairs;
+		let deck, first, lock, moves, pairs, resetTimer;
 
 		function reset() {
+			// A mismatch-reset timeout from a previous game closes over the old deck/cards;
+			// clear it so it can't blank a freshly flipped card in the new game.
+			clearTimeout(resetTimer);
 			deck = [...ICONS, ...ICONS].map((v) => ({ v, matched: false }));
 			for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
 			first = null; lock = false; moves = 0; pairs = 0;
@@ -41,7 +44,9 @@ import GameShell from './GameShell.astro';
 		function flip(i, b) {
 			if (lock || deck[i].matched || b.textContent) return;
 			b.textContent = deck[i].v;
-			if (!first) { first = i; return; }
+			// first holds a card index that can legitimately be 0, so compare to null —
+			// `!first` would treat card 0 as "no first card" and corrupt the turn state.
+			if (first === null) { first = i; return; }
 			moves++; movesEl.textContent = String(moves);
 			if (deck[first].v === deck[i].v) {
 				deck[first].matched = deck[i].matched = true;
@@ -50,7 +55,7 @@ import GameShell from './GameShell.astro';
 			} else {
 				lock = true;
 				const f = first; first = null;
-				setTimeout(() => { deck[f].el.textContent = ''; b.textContent = ''; lock = false; }, 700);
+				resetTimer = setTimeout(() => { deck[f].el.textContent = ''; b.textContent = ''; lock = false; }, 700);
 			}
 		}
 		document.getElementById('mem-reset').addEventListener('click', reset);

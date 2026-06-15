@@ -33,7 +33,7 @@ import GameShell from './GameShell.astro';
 		const N = 15, S = canvas.width / N;
 		const scoreEl = document.getElementById('snake-score');
 		const statusEl = document.getElementById('snake-status');
-		let snake, dir, next, food, score, over, started;
+		let snake, dir, next, food, score, over, started, stepTimer;
 
 		function reset() {
 			snake = [{ x: 7, y: 7 }]; dir = { x: 0, y: 0 }; next = { x: 0, y: 0 };
@@ -56,12 +56,23 @@ import GameShell from './GameShell.astro';
 			if (over || !started) return;
 			dir = next;
 			const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
-			if (head.x < 0 || head.x >= N || head.y < 0 || head.y >= N || snake.some((s) => s.x === head.x && s.y === head.y)) {
+			const eats = head.x === food.x && head.y === food.y;
+			// On a non-eating move the tail vacates this tick, so the cell it leaves is free to
+			// enter — exclude the last segment from the self-collision test unless we're growing.
+			const body = eats ? snake : snake.slice(0, -1);
+			if (head.x < 0 || head.x >= N || head.y < 0 || head.y >= N || body.some((s) => s.x === head.x && s.y === head.y)) {
 				over = true; started = false; statusEl.textContent = 'Game over! Press Restart.'; return;
 			}
 			snake.unshift(head);
-			if (head.x === food.x && head.y === food.y) { score++; scoreEl.textContent = String(score); placeFood(); }
-			else snake.pop();
+			if (eats) {
+				score++; scoreEl.textContent = String(score);
+				// If the snake now fills every cell there is no free square for food — that's a win,
+				// not an infinite placeFood() loop.
+				if (snake.length >= N * N) {
+					over = true; started = false; statusEl.textContent = 'You filled the board — you win! 🎉'; draw(); return;
+				}
+				placeFood();
+			} else snake.pop();
 			draw();
 		}
 		function draw() {
@@ -85,7 +96,10 @@ import GameShell from './GameShell.astro';
 			setDir(m[0], m[1]);
 		}));
 		document.getElementById('snake-reset').addEventListener('click', reset);
+		// ClientRouter swaps the DOM without a full reload; stop the step timer before the swap
+		// so it can't keep firing against the detached canvas (and can't stack on re-entry).
+		document.addEventListener('astro:before-swap', () => { clearInterval(stepTimer); }, { once: true });
 		reset();
-		setInterval(step, 130);
+		stepTimer = setInterval(step, 130);
 	})();
 </script>
