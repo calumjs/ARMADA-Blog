@@ -1,5 +1,6 @@
 ---
 import { tinaField } from "@tinacms/astro/tina-field";
+import { Icon } from 'astro-icon/components';
 import type { CmsConfig, CmsConfigContactLink } from '../lib/data';
 import IconLink from "./IconLink.astro";
 import Starfield from './space/Starfield.astro';
@@ -18,6 +19,11 @@ const today = new Date();
 <footer class="border-t bg-background py-12 text-center text-sm text-muted-foreground relative overflow-hidden">
 	{config?.footerStarfield !== false && <Starfield count={50} class="text-foreground/15" />}
 	<div class="relative flex flex-col items-center gap-6">
+		<div aria-hidden="true" class="flex items-center gap-3 text-primary/80">
+			<Icon name="tabler:wave-sine" class="size-4" />
+			<Icon name="tabler:anchor" class="size-6" />
+			<Icon name="tabler:wave-sine" class="size-4" />
+		</div>
 		{contactLinks.length > 0 && (
 			<div class="flex justify-center gap-4">
 				{contactLinks.map((link) => (

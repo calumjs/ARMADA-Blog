@@ -18,8 +18,10 @@ const contactLinks = (config?.contactLinks ?? []).filter(item => item !== null);
 <header class="fixed top-0 z-20 w-full border-b bg-background/50 backdrop-blur-xl">
 	<nav class="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
 		<a href="/" class="flex items-center gap-2 font-semibold">
-			{seo?.logo && <img src={seo.logo} alt="Logo" width="32" height="32" data-tina-field={tinaField(seo, "logo")} />}
-			<span data-tina-field={seo ? tinaField(seo, "title") : undefined}>{seo?.title}</span>
+			{seo?.logo
+				? <img src={seo.logo} alt="Logo" width="32" height="32" data-tina-field={tinaField(seo, "logo")} />
+				: <Icon name="tabler:anchor" class="size-6 text-primary" aria-hidden="true" />}
+			<span class="font-serif text-lg tracking-tight" data-tina-field={seo ? tinaField(seo, "title") : undefined}>{seo?.title}</span>
 		</a>
 		<div class="hidden items-center gap-8 text-sm lg:flex">
 			{nav.map((item) => (
@@ -46,6 +48,7 @@ const contactLinks = (config?.contactLinks ?? []).filter(item => item !== null);
 			</button>
 		</div>
 	</nav>
+	<hr class="rope-divider mx-auto max-w-6xl" aria-hidden="true" />
 	<div
 		id="mobile-menu-panel"
 		hidden
