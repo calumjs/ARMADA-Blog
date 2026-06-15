@@ -4,14 +4,18 @@
 // Calls three keyless, CORS-enabled, browser-safe third-party APIs directly
 // (no backend, no proxy, no secrets):
 //   - current spot USD/oz  : https://api.gold-api.com/price/XAU
-//   - historical USD/oz     : https://freegoldapi.com/data/latest.json  (annual)
+//   - historical USD/oz     : https://freegoldapi.com/data/latest.json  (≈daily for recent years)
 //   - USD->AUD FX           : https://api.frankfurter.dev/v1/latest?base=USD&symbols=AUD
 //
 // Everything is converted to AUD (USD x FX) and optionally to AUD/gram
-// (1 troy oz = 31.1034768 g). The chart is hand-rolled SVG — no charting
-// dependency — so the static Astro build stays lean. The script defensively
-// validates every third-party response shape before rendering, keeps the last
-// good chart on a refresh failure, and never throws into the page.
+// (1 troy oz = 31.1034768 g). The keyless FX source has no historical endpoint,
+// so historical USD points are converted at *today's* USD->AUD rate — this is an
+// approximation, disclosed in the UI, not true point-in-time AUD.
+//
+// The chart is hand-rolled SVG — no charting dependency — so the static Astro
+// build stays lean. The script defensively validates every third-party response
+// shape before rendering, keeps the last good chart on a refresh failure, tears
+// down cleanly on client-side navigation, and never throws into the page.
 ---
 
 <section
@@ -39,11 +43,14 @@
 			</p>
 		</div>
 
-		<!-- Unit toggle (oz / gram). radiogroup so it is keyboard-accessible and the
-		     selected state is conveyed by aria-checked + a text label, not colour. -->
+		<!-- Unit toggle (oz / gram). Plain toggle buttons with aria-pressed — the
+		     same correct idiom as the range buttons — so every button is a normal
+		     tab stop and the selected state is conveyed by aria + a text label,
+		     not colour alone. (No role=radiogroup, which would promise arrow-key
+		     roving-tabindex semantics we don't implement.) -->
 		<div
 			class="flex flex-col gap-1"
-			role="radiogroup"
+			role="group"
 			aria-label="Price unit"
 			data-gold-units
 		>
@@ -51,25 +58,27 @@
 			<div class="inline-flex rounded-md border bg-background p-0.5">
 				<button
 					type="button"
-					role="radio"
-					aria-checked="true"
+					aria-pressed="true"
 					data-gold-unit="oz"
-					class="rounded px-3 py-1 text-sm font-medium transition-colors aria-checked:bg-primary aria-checked:text-primary-foreground"
+					class="rounded px-3 py-1 text-sm font-medium transition-colors aria-pressed:bg-primary aria-pressed:text-primary-foreground"
 				>per oz</button>
 				<button
 					type="button"
-					role="radio"
-					aria-checked="false"
+					aria-pressed="false"
 					data-gold-unit="g"
-					class="rounded px-3 py-1 text-sm font-medium transition-colors aria-checked:bg-primary aria-checked:text-primary-foreground"
+					class="rounded px-3 py-1 text-sm font-medium transition-colors aria-pressed:bg-primary aria-pressed:text-primary-foreground"
 				>per gram</button>
 			</div>
 		</div>
 	</div>
 
 	<!-- Range controls. Each is a real <button>; the active one is marked with
-	     aria-pressed (not colour alone). Ranges without free granular data are
-	     disabled and explain why via title + the message region below. -->
+	     aria-pressed (not colour alone). The free historical feed is ≈daily for
+	     recent years, so 1W/1M/6M/1Y/5Y are all supported (windows are anchored
+	     to the most recent available data point, which can lag "today"). Only 1D
+	     is disabled — the free source has no intraday granularity — and its
+	     reason is shown as always-visible text below (not hover-only title), so
+	     keyboard users get it too. -->
 	<div class="flex flex-col gap-2">
 		<div
 			class="flex flex-wrap gap-2"
@@ -78,15 +87,13 @@
 			data-gold-ranges
 		>
 			<button type="button" data-gold-range="1D" disabled aria-pressed="false"
-				title="Intraday data isn't available from the free source"
+				aria-describedby="gold-disabled-note"
 				class="rounded-full border bg-background px-3 py-1 text-sm font-medium transition-colors hover:enabled:text-foreground aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
 			>1D</button>
-			<button type="button" data-gold-range="1W" disabled aria-pressed="false"
-				title="Weekly granularity isn't available from the free source"
+			<button type="button" data-gold-range="1W" aria-pressed="false"
 				class="rounded-full border bg-background px-3 py-1 text-sm font-medium transition-colors hover:enabled:text-foreground aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
 			>1W</button>
-			<button type="button" data-gold-range="1M" disabled aria-pressed="false"
-				title="Monthly granularity isn't available from the free source"
+			<button type="button" data-gold-range="1M" aria-pressed="false"
 				class="rounded-full border bg-background px-3 py-1 text-sm font-medium transition-colors hover:enabled:text-foreground aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
 			>1M</button>
 			<button type="button" data-gold-range="6M" aria-pressed="false"
@@ -99,6 +106,9 @@
 				class="rounded-full border bg-background px-3 py-1 text-sm font-medium transition-colors hover:enabled:text-foreground aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
 			>5Y</button>
 		</div>
+		<p id="gold-disabled-note" class="text-xs text-muted-foreground/80">
+			1D (intraday) isn't available from the free source.
+		</p>
 		<p id="gold-range-note" class="min-h-4 text-xs text-muted-foreground" aria-live="polite"></p>
 	</div>
 
@@ -120,17 +130,25 @@
 				role="img"
 				aria-label="Historical gold price line chart in Australian dollars"
 			></svg>
-			<!-- Tooltip; hidden until hover/tap, position set by the script. -->
+			<!-- Tooltip; hidden until hover/tap, position set by the script. It's a
+			     pointer-only affordance updated on every move, so it is NOT an
+			     aria-live region (no role=status) — that would spam SR users. -->
 			<div
 				id="gold-tooltip"
-				role="status"
+				aria-hidden="true"
 				class="pointer-events-none absolute z-10 hidden -translate-x-1/2 -translate-y-full rounded-md border bg-popover px-2 py-1 text-xs text-popover-foreground shadow-md"
 			></div>
 		</div>
 		<p class="text-xs text-muted-foreground/80">
-			Historical data is annual (year-end) from a free source — adequate for
-			long-range trend, not intraday detail. Latest price refreshes every 5 minutes.
+			Historical data is daily (recent years) from a free source and can lag the
+			current date by a few days. Past points are converted to AUD at <em>today's</em>
+			USD→AUD exchange rate (the free FX source has no historical rates), so the
+			line shows the USD trend rescaled to today's AUD — an approximation, not the
+			AUD price as it was on each date. Latest price refreshes every 5 minutes.
 		</p>
+		<!-- Visually-hidden data table: a keyboard/SR-accessible equivalent of the
+		     pointer-only chart hover (the SVG itself isn't focusable). -->
+		<div id="gold-data-table" class="sr-only" aria-live="polite"></div>
 	</div>
 </section>
 
@@ -146,11 +164,19 @@
 		const HIST_URL = 'https://freegoldapi.com/data/latest.json';
 		const GRAMS_PER_OZ = 31.1034768;
 		const REFRESH_MS = 5 * 60 * 1000;
+		const FETCH_TIMEOUT_MS = 12 * 1000; // a hung provider can't wedge the page
+		// Plausible bounds (USD/oz) to reject absurd values before they become
+		// non-finite or off-canvas SVG coordinates.
+		const MIN_USD_OZ = 1;
+		const MAX_USD_OZ = 1_000_000;
 
 		// Ranges with no free granular data — disabled in the markup; listed here
 		// so the friendly "unavailable" note can name them if one is reached.
-		const UNAVAILABLE = { '1D': true, '1W': true, '1M': true };
-		const RANGE_YEARS = { '6M': 0.5, '1Y': 1, '5Y': 5 };
+		// (Only 1D: the feed is ≈daily, so 1W/1M/6M/1Y/5Y are all supported.)
+		const UNAVAILABLE = { '1D': true };
+		// Window length per range, in days. Anchored to the most recent available
+		// data point (not "today"), since the free feed can lag the current date.
+		const RANGE_DAYS = { '1W': 7, '1M': 31, '6M': 183, '1Y': 366, '5Y': 1827 };
 
 		// ---- Elements --------------------------------------------------------
 		const latestEl = root.querySelector('#gold-latest');
@@ -161,6 +187,7 @@
 		const rangeNoteEl = root.querySelector('#gold-range-note');
 		const tooltipEl = root.querySelector('#gold-tooltip');
 		const chartWrap = root.querySelector('[data-gold-chart-wrap]');
+		const dataTableEl = root.querySelector('#gold-data-table');
 		const SVGNS = 'http://www.w3.org/2000/svg';
 
 		// ---- State -----------------------------------------------------------
@@ -171,6 +198,9 @@
 		let spotUpdatedAt = null;
 		let history = []; // [{ t: epochMs, usd: usdPerOz }] sorted ascending
 		let refreshTimer = null;
+		let refreshing = false; // serialise refreshes — drop overlap (minor)
+		let disposed = false; // set on client-side nav / unload; bail out of async work
+		const inflight = new Set(); // AbortControllers for in-flight fetches
 
 		// ---- Helpers ---------------------------------------------------------
 		const isFiniteNum = (n) => typeof n === 'number' && isFinite(n);
@@ -185,15 +215,34 @@
 		const toUnit = (usdPerOz) => {
 			if (!isFiniteNum(usdPerOz) || !isFiniteNum(fxRate)) return null;
 			const audPerOz = usdPerOz * fxRate;
-			return unit === 'g' ? audPerOz / GRAMS_PER_OZ : audPerOz;
+			const v = unit === 'g' ? audPerOz / GRAMS_PER_OZ : audPerOz;
+			return isFiniteNum(v) ? v : null;
 		};
 
 		const unitLabel = () => (unit === 'g' ? 'AUD / g' : 'AUD / oz');
 
+		// Historical dates are calendar days (YYYY-MM-DD parsed as UTC midnight);
+		// render them in UTC so users west of UTC don't see them shift a day back.
+		const fmtUtcDay = (t) =>
+			new Date(t).toLocaleDateString('en-AU', { dateStyle: 'medium', timeZone: 'UTC' });
+
+		// AbortController-based timeout so a hung endpoint can't stall the page;
+		// also aborted en-masse on dispose (client-side nav / unload).
 		async function getJson(url) {
-			const res = await fetch(url, { headers: { accept: 'application/json' } });
-			if (!res.ok) throw new Error(`HTTP ${res.status}`);
-			return res.json();
+			const ctrl = new AbortController();
+			inflight.add(ctrl);
+			const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+			try {
+				const res = await fetch(url, {
+					headers: { accept: 'application/json' },
+					signal: ctrl.signal,
+				});
+				if (!res.ok) throw new Error(`HTTP ${res.status}`);
+				return await res.json();
+			} finally {
+				clearTimeout(timer);
+				inflight.delete(ctrl);
+			}
 		}
 
 		// ---- Render: latest price (text, not only in the chart) --------------
@@ -217,15 +266,17 @@
 		}
 
 		// ---- Render: the SVG line chart --------------------------------------
+		// Window is anchored to the MOST RECENT available data point, not "today"
+		// — the free feed can lag the current date by days, so a today-anchored
+		// 1W/1M window would be empty even though recent data exists. No silent
+		// out-of-range fallback: if a window genuinely lacks data we report that
+		// (see renderChart), rather than plotting old points under a recent label.
 		function visiblePoints() {
-			const years = RANGE_YEARS[range];
-			if (!years || !history.length) return [];
-			const cutoff = Date.now() - years * 365.25 * 24 * 3600 * 1000;
-			let pts = history.filter((p) => p.t >= cutoff);
-			// Always keep at least the two most recent points so a sparse annual
-			// series still draws a line for shorter ranges.
-			if (pts.length < 2 && history.length >= 2) pts = history.slice(-2);
-			return pts;
+			const days = RANGE_DAYS[range];
+			if (!days || !history.length) return [];
+			const anchor = history[history.length - 1].t; // latest point's date
+			const cutoff = anchor - days * 24 * 3600 * 1000;
+			return history.filter((p) => p.t >= cutoff);
 		}
 
 		function clearChart() {
@@ -240,20 +291,34 @@
 			chartGeom = null;
 
 			if (UNAVAILABLE[range]) {
+				// Only 1D reaches here (intraday, no free feed). 1W/1M are now enabled.
 				rangeNoteEl.textContent =
-					`The ${range} view isn't available — the free historical source only provides annual data. Try 6M, 1Y or 5Y.`;
-				chartStatusEl.textContent = 'Select 6M, 1Y or 5Y to view the chart.';
+					`The ${range} view isn't available — the free source has no intraday data. Try 1W, 1M, 6M, 1Y or 5Y.`;
+				chartStatusEl.textContent = 'Select 1W, 1M, 6M, 1Y or 5Y to view the chart.';
+				renderDataTable([]);
 				return;
 			}
 			rangeNoteEl.textContent = '';
 
-			const pts = visiblePoints();
-			if (fxRate == null) {
-				chartStatusEl.textContent = 'Waiting for the exchange rate…';
+			if (!history.length) {
+				chartStatusEl.textContent = 'Historical prices are unavailable right now.';
+				renderDataTable([]);
 				return;
 			}
+			if (fxRate == null) {
+				chartStatusEl.textContent = 'Waiting for the exchange rate…';
+				renderDataTable([]);
+				return;
+			}
+
+			const pts = visiblePoints();
 			if (pts.length < 2) {
-				chartStatusEl.textContent = 'Not enough historical data to draw a chart for this range.';
+				// No silent substitution of out-of-range points: say so plainly.
+				const latest = history[history.length - 1];
+				const asOf = fmtUtcDay(latest.t);
+				chartStatusEl.textContent =
+					`Not enough data in the ${range} window to draw a chart (the feed's most recent point is ${asOf}). Try a longer range.`;
+				renderDataTable([]);
 				return;
 			}
 
@@ -261,6 +326,7 @@
 			const vals = pts.map((p) => toUnit(p.usd)).filter(isFiniteNum);
 			if (vals.length < 2) {
 				chartStatusEl.textContent = 'Not enough historical data to draw a chart for this range.';
+				renderDataTable([]);
 				return;
 			}
 			let min = Math.min(...vals);
@@ -297,14 +363,15 @@
 				chartEl.appendChild(label);
 			}
 
-			// X axis end labels. Annual granularity over long ranges, month+year
-			// when the window is short enough that a bare year would be ambiguous.
+			// X axis end labels. Year-only over long ranges, month+year when the
+			// window is short enough that a bare year would be ambiguous. UTC, to
+			// match how the calendar-day points were parsed.
 			const spanDays = span / (24 * 3600 * 1000);
 			const fmtAxis = (t) => {
 				const d = new Date(t);
 				return spanDays <= 800
-					? d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric' })
-					: d.getFullYear().toString();
+					? d.toLocaleDateString('en-AU', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+					: d.toLocaleDateString('en-AU', { year: 'numeric', timeZone: 'UTC' });
 			};
 			const xs = mk('text', { x: padL, y: H - 8, 'text-anchor': 'start', fill: 'var(--muted-foreground)', 'font-size': '12' });
 			xs.textContent = fmtAxis(t0);
@@ -328,9 +395,46 @@
 			});
 
 			chartGeom = { coords, W, H };
-			const fmtDay = (t) => new Date(t).toLocaleDateString('en-AU', { dateStyle: 'medium' });
 			chartStatusEl.textContent =
-				`Showing ${pts.length} ${pts.length === 1 ? 'point' : 'points'} (${fmtDay(t0)} – ${fmtDay(t1)}), in ${unitLabel()}.`;
+				`Showing ${pts.length} ${pts.length === 1 ? 'point' : 'points'} (${fmtUtcDay(t0)} – ${fmtUtcDay(t1)}), in ${unitLabel()} — past points use today's FX (approx).`;
+			renderDataTable(coords);
+		}
+
+		// ---- Accessible data table (keyboard/SR equivalent of the chart) -----
+		// The SVG hover is pointer-only, so mirror the plotted points as a real
+		// table in a visually-hidden, aria-live region.
+		function renderDataTable(coords) {
+			while (dataTableEl.firstChild) dataTableEl.removeChild(dataTableEl.firstChild);
+			if (!coords || !coords.length) return;
+			const table = document.createElement('table');
+			const caption = document.createElement('caption');
+			caption.textContent = `Gold price history (${range}), in ${unitLabel()} — past points converted at today's exchange rate.`;
+			table.appendChild(caption);
+			const thead = document.createElement('thead');
+			const hr = document.createElement('tr');
+			['Date', `Price (${unitLabel()})`].forEach((h) => {
+				const th = document.createElement('th');
+				th.setAttribute('scope', 'col');
+				th.textContent = h;
+				hr.appendChild(th);
+			});
+			thead.appendChild(hr);
+			table.appendChild(thead);
+			const tbody = document.createElement('tbody');
+			for (const c of coords) {
+				const v = toUnit(c.usd);
+				if (v == null) continue;
+				const tr = document.createElement('tr');
+				const td1 = document.createElement('td');
+				td1.textContent = fmtUtcDay(c.t);
+				const td2 = document.createElement('td');
+				td2.textContent = fmtAud(v);
+				tr.appendChild(td1);
+				tr.appendChild(td2);
+				tbody.appendChild(tr);
+			}
+			table.appendChild(tbody);
+			dataTableEl.appendChild(table);
 		}
 
 		// ---- Tooltip (hover desktop / tap mobile) ----------------------------
@@ -347,7 +451,7 @@
 			if (!nearest) return;
 			const v = toUnit(nearest.usd);
 			if (v == null) return;
-			const when = new Date(nearest.t).toLocaleDateString('en-AU', { dateStyle: 'medium' });
+			const when = fmtUtcDay(nearest.t);
 			tooltipEl.textContent = `${when}: ${fmtAud(v)} (${unitLabel()})`;
 			tooltipEl.classList.remove('hidden');
 			// Position relative to the wrapper using the dot's SVG coords.
@@ -368,7 +472,7 @@
 			btn.addEventListener('click', () => {
 				unit = btn.getAttribute('data-gold-unit');
 				root.querySelectorAll('[data-gold-unit]').forEach((b) => {
-					b.setAttribute('aria-checked', b === btn ? 'true' : 'false');
+					b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
 				});
 				renderLatest();
 				renderChart();
@@ -387,80 +491,124 @@
 		});
 
 		// ---- Data loading ----------------------------------------------------
-		// Validate every third-party shape before trusting it.
+		// Validate every third-party shape before trusting it. Require strict
+		// numeric types (no Number() coercion of booleans/arrays), assert the
+		// expected currency/base, and bound values to a plausible USD/oz range
+		// so an absurd figure can't become a non-finite/off-canvas coordinate.
+		const inUsdOzRange = (n) => isFiniteNum(n) && n >= MIN_USD_OZ && n <= MAX_USD_OZ;
+
 		function parseSpot(j) {
-			if (j && isFiniteNum(j.price) && j.price > 0) {
-				return { price: j.price, updatedAt: j.updatedAt ?? j.updated_at ?? null };
-			}
-			return null;
+			if (!j || !inUsdOzRange(j.price)) return null;
+			// gold-api returns currency "USD"; reject anything else outright.
+			if (j.currency != null && j.currency !== 'USD') return null;
+			const ua = j.updatedAt ?? j.updated_at ?? null;
+			const updatedAt =
+				typeof ua === 'string' || typeof ua === 'number' ? ua : null;
+			return { price: j.price, updatedAt };
 		}
 		function parseFx(j) {
-			const r = j && j.rates && j.rates.AUD;
-			return isFiniteNum(r) && r > 0 ? r : null;
+			if (!j) return null;
+			if (j.base != null && j.base !== 'USD') return null;
+			const r = j.rates && j.rates.AUD;
+			return isFiniteNum(r) && r > 0 && r < 1000 ? r : null;
 		}
 		function parseHistory(j) {
 			if (!Array.isArray(j)) return [];
 			const out = [];
 			for (const row of j) {
 				if (!row) continue;
-				const price = Number(row.price);
+				// Strict numeric type only — don't coerce booleans/arrays.
+				if (typeof row.price !== 'number' || typeof row.date !== 'string') continue;
+				const price = row.price;
 				const t = Date.parse(row.date);
-				if (isFiniteNum(price) && price > 0 && !isNaN(t)) out.push({ t, usd: price });
+				if (inUsdOzRange(price) && !isNaN(t)) out.push({ t, usd: price });
 			}
 			out.sort((a, b) => a.t - b.t);
 			return out;
 		}
 
 		async function loadLatest() {
-			// Fetch spot + FX independently so one failing doesn't void the other.
-			const [spotRes, fxRes] = await Promise.allSettled([getJson(SPOT_URL), getJson(FX_URL)]);
-			let ok = false;
-			if (fxRes.status === 'fulfilled') {
-				const r = parseFx(fxRes.value);
-				if (r != null) fxRate = r;
+			// Serialise refreshes: drop an overlapping run so a slow earlier
+			// response can't clobber fresher state.
+			if (refreshing) return;
+			refreshing = true;
+			try {
+				// Spot + FX fetched independently so one failing doesn't void the
+				// other; successes are cached across cycles.
+				const [spotRes, fxRes] = await Promise.allSettled([getJson(SPOT_URL), getJson(FX_URL)]);
+				if (disposed) return;
+
+				let spotFresh = false;
+				let fxChanged = false;
+
+				if (fxRes.status === 'fulfilled') {
+					const r = parseFx(fxRes.value);
+					if (r != null && r !== fxRate) { fxRate = r; fxChanged = true; }
+					else if (r != null) fxRate = r;
+				}
+				if (spotRes.status === 'fulfilled') {
+					const s = parseSpot(spotRes.value);
+					if (s) {
+						spotUsd = s.price;
+						spotUpdatedAt = s.updatedAt || new Date().toISOString();
+						spotFresh = true;
+					}
+				}
+
+				// Render whenever we have both cached pieces — decoupled from this
+				// cycle's success, so cross-cycle cached values still render.
+				if (spotUsd != null && fxRate != null) {
+					renderLatest();
+					// FX feeds every AUD label/point — re-draw the chart when it moves.
+					if (fxChanged) renderChart();
+				} else if (latestEl.textContent === '—') {
+					updatedEl.textContent = 'Couldn’t load the latest price right now — will retry shortly.';
+				} else if (!spotFresh) {
+					// A refresh failed but we already have a price: keep it, note staleness.
+					updatedEl.textContent = `${updatedEl.textContent.replace(/ · refresh failed$/, '')} · refresh failed`;
+				}
+			} finally {
+				refreshing = false;
 			}
-			if (spotRes.status === 'fulfilled') {
-				const s = parseSpot(spotRes.value);
-				if (s) { spotUsd = s.price; spotUpdatedAt = s.updatedAt || new Date().toISOString(); ok = true; }
-			}
-			if (ok && fxRate != null) {
-				renderLatest();
-			} else if (latestEl.textContent === '—') {
-				// First load failed outright — show a friendly message, don't crash.
-				updatedEl.textContent = 'Couldn’t load the latest price right now — will retry shortly.';
-			} else {
-				// A refresh failed but we already have a price: keep it, note staleness.
-				updatedEl.textContent = `${updatedEl.textContent.replace(/ · refresh failed$/, '')} · refresh failed`;
-			}
-			return ok;
 		}
 
 		async function loadHistory() {
 			try {
 				const j = await getJson(HIST_URL);
+				if (disposed) return;
 				const parsed = parseHistory(j);
 				if (parsed.length) history = parsed; // else keep whatever we had
 			} catch {
-				/* network/parse error — keep the last good history, don't crash */
+				/* network/parse/timeout/abort error — keep last good history, don't crash */
 			}
-			renderChart();
+			if (!disposed) renderChart();
 		}
 
 		async function init() {
-			// Latest first (needs FX, which the chart also needs), then history.
-			await loadLatest();
-			await loadHistory();
-			// If the chart was waiting on FX, this re-render now has it.
+			// Load latest and history in PARALLEL — a hung latest provider must
+			// not block history (or vice versa). Each fetch is also timeout-bounded.
+			await Promise.allSettled([loadLatest(), loadHistory()]);
+			if (disposed) return;
+			// Final re-render in case the chart was waiting on FX or history.
 			renderChart();
-
-			refreshTimer = setInterval(() => { loadLatest(); }, REFRESH_MS);
+			if (disposed) return; // navigation may have fired during the awaits
+			refreshTimer = setInterval(() => { if (!disposed) loadLatest(); }, REFRESH_MS);
 		}
 
-		// ClientRouter swaps the DOM without a full reload — stop the timer before
-		// the swap so it can't fire against a detached tree or stack on re-entry.
-		document.addEventListener('astro:before-swap', () => {
-			if (refreshTimer) clearInterval(refreshTimer);
-		}, { once: true });
+		// Teardown: stop the timer AND abort in-flight fetches AND flag disposed so
+		// any awaiting init()/load resumes into a no-op (no render/timer against a
+		// detached tree). Wired to both Astro's ClientRouter swap and page unload.
+		function teardown() {
+			if (disposed) return;
+			disposed = true;
+			if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+			for (const ctrl of inflight) {
+				try { ctrl.abort(); } catch { /* ignore */ }
+			}
+			inflight.clear();
+		}
+		document.addEventListener('astro:before-swap', teardown, { once: true });
+		window.addEventListener('pagehide', teardown, { once: true });
 
 		init();
 	})();
