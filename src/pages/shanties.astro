@@ -1,0 +1,74 @@
+---
+import Base from '../layouts/Base.astro';
+import { getConfig } from '../lib/data';
+import { shanties, previewLink } from '../lib/shanties';
+
+const config = (await getConfig()).data?.config ?? null;
+---
+
+<Base
+	title={`Sea Shanties · ${config?.seo?.title ?? 'TinaCMS + Astro'}`}
+	description="A curated playlist of popular sea chants and maritime folk songs — title, performer, and a link to preview each one. Static, client-side, no accounts."
+>
+	<main class="mx-auto max-w-4xl px-6 py-12">
+		<header class="mb-8 flex flex-col gap-3">
+			<h1 class="text-4xl font-semibold tracking-tight">Sea Shanties</h1>
+			<p class="max-w-2xl text-muted-foreground">
+				A curated logbook of popular sea chants and maritime folk songs to
+				complete the voyage. Each entry lists the song, a performer or
+				tradition behind it, and a link to preview a recording on a streaming
+				service of your choice — no player, no accounts, no downloads here.
+			</p>
+			<nav class="flex flex-wrap gap-2" aria-label="Jump to a song">
+				{shanties.map((s) => (
+					<a
+						href={`#${s.id}`}
+						class="rounded-full border bg-card px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+					>{s.title.split(' (')[0]}</a>
+				))}
+			</nav>
+			<hr class="rope-divider max-w-2xl" aria-hidden="true" />
+		</header>
+
+		<ol class="grid list-none gap-6 p-0 md:grid-cols-2">
+			{shanties.map((s) => (
+				<li id={s.id} class="flex scroll-mt-24 flex-col gap-3 rounded-lg border bg-card p-5 shadow-sm">
+					<div class="flex items-start justify-between gap-3">
+						<h2 class="font-serif text-xl leading-snug tracking-tight">{s.title}</h2>
+						<span class="shrink-0 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-xs text-primary">{s.type}</span>
+					</div>
+					<p class="text-sm font-medium text-muted-foreground">{s.artist}</p>
+					<p class="flex-1 text-sm text-muted-foreground">{s.note}</p>
+					<a
+						href={previewLink(s)}
+						target="_blank"
+						rel="noopener noreferrer"
+						class="inline-flex w-fit items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
+					>
+						Preview <span aria-hidden="true">↗</span>
+						<span class="sr-only">(opens a search for {s.title} in a new tab)</span>
+					</a>
+				</li>
+			))}
+		</ol>
+
+		<section class="mt-12 max-w-2xl text-sm text-muted-foreground">
+			<hr class="rope-divider mb-6" aria-hidden="true" />
+			<h2 class="mb-2 font-serif text-lg text-foreground">How this playlist was curated</h2>
+			<p class="mb-2">
+				This is a hand-picked, static list — there is no audio player and
+				nothing is streamed or hosted here. Songs were chosen for
+				recognisability, for variety across shanty work-song types and broader
+				maritime folk ballads, and with a heritage / public-domain leaning:
+				most are traditional songs long out of copyright.
+			</p>
+			<p>
+				Each <em>Preview</em> link opens a third-party search for a performance,
+				rather than embedding a fixed recording — so the page doesn't endorse
+				any one uploader and doesn't rot when an individual video is removed.
+				The full curation notes live in
+				<code>src/lib/shanties.ts</code>.
+			</p>
+		</section>
+	</main>
+</Base>
