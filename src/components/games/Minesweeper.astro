@@ -1,0 +1,108 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="minesweeper"
+	title="Minesweeper"
+	instructions="Click/tap a cell to reveal it. Right-click (or long-press) to flag a mine. Clear all safe cells to win."
+>
+	<div id="mine-board" class="grid touch-none gap-0.5 rounded-md border bg-background p-1 select-none"></div>
+	<p class="text-sm font-medium">Mines left: <span id="mine-count">0</span> · <span id="mine-status">Click a cell to start</span></p>
+	<button id="mine-reset" class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">New game</button>
+</GameShell>
+
+<script is:inline>
+	(() => {
+		const board = document.getElementById('mine-board');
+		if (!board) return;
+		const SIZE = 9, MINES = 10;
+		const countEl = document.getElementById('mine-count');
+		const statusEl = document.getElementById('mine-status');
+		let cells, revealed, flagged, mines, over, started, longTimer;
+
+		function reset() {
+			cells = []; over = false; started = false;
+			revealed = Array.from({ length: SIZE }, () => Array(SIZE).fill(false));
+			flagged = Array.from({ length: SIZE }, () => Array(SIZE).fill(false));
+			mines = Array.from({ length: SIZE }, () => Array(SIZE).fill(false));
+			countEl.textContent = String(MINES);
+			statusEl.textContent = 'Click a cell to start';
+			board.style.gridTemplateColumns = `repeat(${SIZE}, 1.75rem)`;
+			board.innerHTML = '';
+			for (let y = 0; y < SIZE; y++) {
+				cells[y] = [];
+				for (let x = 0; x < SIZE; x++) {
+					const c = document.createElement('button');
+					c.className = 'flex size-7 items-center justify-center rounded-sm border bg-muted text-xs font-bold';
+					c.dataset.x = String(x); c.dataset.y = String(y);
+					c.addEventListener('click', () => reveal(x, y));
+					c.addEventListener('contextmenu', (e) => { e.preventDefault(); flag(x, y); });
+					c.addEventListener('touchstart', () => { longTimer = setTimeout(() => { flag(x, y); longTimer = null; }, 400); }, { passive: true });
+					c.addEventListener('touchend', (e) => { if (longTimer) { clearTimeout(longTimer); longTimer = null; reveal(x, y); e.preventDefault(); } });
+					board.appendChild(c); cells[y][x] = c;
+				}
+			}
+		}
+		function place(sx, sy) {
+			let placed = 0;
+			while (placed < MINES) {
+				const x = Math.floor(Math.random() * SIZE), y = Math.floor(Math.random() * SIZE);
+				if (mines[y][x] || (Math.abs(x - sx) <= 1 && Math.abs(y - sy) <= 1)) continue;
+				mines[y][x] = true; placed++;
+			}
+			started = true; statusEl.textContent = 'Playing…';
+		}
+		function neighbors(x, y) {
+			let n = 0;
+			for (let dy = -1; dy <= 1; dy++)
+				for (let dx = -1; dx <= 1; dx++) {
+					const nx = x + dx, ny = y + dy;
+					if (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE && mines[ny][nx]) n++;
+				}
+			return n;
+		}
+		function reveal(x, y) {
+			if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
+			if (over || revealed[y][x] || flagged[y][x]) return;
+			if (!started) place(x, y);
+			revealed[y][x] = true;
+			const c = cells[y][x];
+			c.classList.remove('bg-muted');
+			c.classList.add('bg-background');
+			if (mines[y][x]) {
+				c.textContent = '💣'; c.classList.add('bg-red-500');
+				over = true; statusEl.textContent = 'Boom! Game over.';
+				revealAll(); return;
+			}
+			const n = neighbors(x, y);
+			if (n) { c.textContent = String(n); c.style.color = ['', '#2563eb', '#16a34a', '#dc2626', '#7c3aed', '#b45309', '#0891b2', '#000', '#666'][n]; }
+			else
+				for (let dy = -1; dy <= 1; dy++)
+					for (let dx = -1; dx <= 1; dx++) reveal(x + dx, y + dy);
+			checkWin();
+		}
+		function flag(x, y) {
+			if (over || revealed[y][x]) return;
+			if (!started) place(x, y);
+			flagged[y][x] = !flagged[y][x];
+			cells[y][x].textContent = flagged[y][x] ? '🚩' : '';
+			let f = 0; flagged.forEach((r) => r.forEach((v) => v && f++));
+			countEl.textContent = String(MINES - f);
+		}
+		function revealAll() {
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					if (mines[y][x] && !flagged[y][x]) cells[y][x].textContent = '💣';
+		}
+		function checkWin() {
+			let safe = 0;
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					if (revealed[y][x] && !mines[y][x]) safe++;
+			if (safe === SIZE * SIZE - MINES) { over = true; statusEl.textContent = 'You win! 🎉'; }
+		}
+		document.getElementById('mine-reset').addEventListener('click', reset);
+		reset();
+	})();
+</script>

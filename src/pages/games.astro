@@ -1,0 +1,60 @@
+---
+import Base from '../layouts/Base.astro';
+import { getConfig } from '../lib/data';
+import Tetris from '../components/games/Tetris.astro';
+import Minesweeper from '../components/games/Minesweeper.astro';
+import FlappyBird from '../components/games/FlappyBird.astro';
+import Snake from '../components/games/Snake.astro';
+import Game2048 from '../components/games/Game2048.astro';
+import MemoryMatch from '../components/games/MemoryMatch.astro';
+import Breakout from '../components/games/Breakout.astro';
+import TicTacToe from '../components/games/TicTacToe.astro';
+
+const config = (await getConfig()).data?.config ?? null;
+
+const games = [
+	{ id: 'tetris', name: 'Tetris' },
+	{ id: 'minesweeper', name: 'Minesweeper' },
+	{ id: 'flappy', name: 'Flappy Bird' },
+	{ id: 'snake', name: 'Snake' },
+	{ id: 'game2048', name: '2048' },
+	{ id: 'memory', name: 'Memory Match' },
+	{ id: 'breakout', name: 'Breakout' },
+	{ id: 'tictactoe', name: 'Tic-Tac-Toe' },
+];
+---
+
+<Base
+	title={`Games · ${config?.seo?.title ?? 'TinaCMS + Astro'}`}
+	description="A collection of self-contained, browser-playable games — no downloads, no accounts, just play."
+>
+	<main class="mx-auto max-w-6xl px-6 py-12">
+		<header class="mb-8 flex flex-col gap-3">
+			<h1 class="text-4xl font-semibold tracking-tight">Games</h1>
+			<p class="max-w-2xl text-muted-foreground">
+				A small arcade of classic games, each one a self-contained client-side
+				component that runs entirely in your browser. No downloads, no accounts —
+				pick one and play. Click a game to jump to it.
+			</p>
+			<nav class="flex flex-wrap gap-2" aria-label="Jump to a game">
+				{games.map((g) => (
+					<a
+						href={`#${g.id}`}
+						class="rounded-full border bg-card px-3 py-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+					>{g.name}</a>
+				))}
+			</nav>
+		</header>
+
+		<div class="grid gap-6 md:grid-cols-2">
+			<Tetris />
+			<Minesweeper />
+			<FlappyBird />
+			<Snake />
+			<Game2048 />
+			<MemoryMatch />
+			<Breakout />
+			<TicTacToe />
+		</div>
+	</main>
+</Base>

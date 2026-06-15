@@ -1,0 +1,148 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="tetris"
+	title="Tetris"
+	instructions="Arrow keys: move/rotate, Down to soft-drop, Space to hard-drop, P to pause. On touch: use the buttons."
+>
+	<canvas
+		id="tetris-canvas"
+		width="240"
+		height="480"
+		class="w-full max-w-[240px] touch-none rounded-md border bg-background"
+	></canvas>
+	<p class="text-sm font-medium">Score: <span id="tetris-score">0</span> · <span id="tetris-status">Press any arrow key to start</span></p>
+	<div class="grid grid-cols-5 gap-2 sm:hidden">
+		<button data-tetris-btn="left" class="rounded-md border bg-background px-3 py-2 text-sm">◀</button>
+		<button data-tetris-btn="rotate" class="rounded-md border bg-background px-3 py-2 text-sm">⟳</button>
+		<button data-tetris-btn="right" class="rounded-md border bg-background px-3 py-2 text-sm">▶</button>
+		<button data-tetris-btn="down" class="rounded-md border bg-background px-3 py-2 text-sm">▼</button>
+		<button data-tetris-btn="drop" class="rounded-md border bg-background px-3 py-2 text-sm">⤓</button>
+	</div>
+	<button id="tetris-reset" class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">Restart</button>
+</GameShell>
+
+<script is:inline>
+	(() => {
+		const canvas = document.getElementById('tetris-canvas');
+		if (!canvas) return;
+		const ctx = canvas.getContext('2d');
+		const COLS = 10, ROWS = 20, SIZE = 24;
+		const COLORS = ['#0ea5e9', '#f59e0b', '#a855f7', '#22c55e', '#ef4444', '#3b82f6', '#eab308'];
+		const SHAPES = [
+			[[1, 1, 1, 1]],
+			[[1, 1], [1, 1]],
+			[[0, 1, 0], [1, 1, 1]],
+			[[0, 1, 1], [1, 1, 0]],
+			[[1, 1, 0], [0, 1, 1]],
+			[[1, 0, 0], [1, 1, 1]],
+			[[0, 0, 1], [1, 1, 1]],
+		];
+		const scoreEl = document.getElementById('tetris-score');
+		const statusEl = document.getElementById('tetris-status');
+		let grid, piece, px, py, color, score, over, started, dropTimer;
+
+		function reset() {
+			grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+			score = 0; over = false; started = false;
+			scoreEl.textContent = '0';
+			statusEl.textContent = 'Press any arrow key to start';
+			spawn();
+			draw();
+		}
+		function spawn() {
+			const i = Math.floor(Math.random() * SHAPES.length);
+			piece = SHAPES[i].map((r) => r.slice());
+			color = i + 1;
+			px = Math.floor((COLS - piece[0].length) / 2);
+			py = 0;
+			if (collides(piece, px, py)) {
+				over = true; started = false;
+				statusEl.textContent = 'Game over! Press Restart.';
+			}
+		}
+		function collides(p, ox, oy) {
+			for (let y = 0; y < p.length; y++)
+				for (let x = 0; x < p[y].length; x++) {
+					if (!p[y][x]) continue;
+					const nx = ox + x, ny = oy + y;
+					if (nx < 0 || nx >= COLS || ny >= ROWS) return true;
+					if (ny >= 0 && grid[ny][nx]) return true;
+				}
+			return false;
+		}
+		function merge() {
+			for (let y = 0; y < piece.length; y++)
+				for (let x = 0; x < piece[y].length; x++)
+					if (piece[y][x] && py + y >= 0) grid[py + y][px + x] = color;
+		}
+		function clearLines() {
+			let cleared = 0;
+			for (let y = ROWS - 1; y >= 0; y--) {
+				if (grid[y].every((c) => c)) {
+					grid.splice(y, 1);
+					grid.unshift(Array(COLS).fill(0));
+					cleared++; y++;
+				}
+			}
+			if (cleared) { score += cleared * 100; scoreEl.textContent = String(score); }
+		}
+		function rotate() {
+			const r = piece[0].map((_, i) => piece.map((row) => row[i]).reverse());
+			if (!collides(r, px, py)) piece = r;
+		}
+		function move(dx) { if (!collides(piece, px + dx, py)) px += dx; }
+		function tick() {
+			if (over || !started) return;
+			if (!collides(piece, px, py + 1)) py++;
+			else { merge(); clearLines(); spawn(); }
+			draw();
+		}
+		function hardDrop() {
+			while (!collides(piece, px, py + 1)) py++;
+			merge(); clearLines(); spawn(); draw();
+		}
+		function draw() {
+			ctx.fillStyle = '#0b1020';
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			for (let y = 0; y < ROWS; y++)
+				for (let x = 0; x < COLS; x++)
+					if (grid[y][x]) cell(x, y, COLORS[grid[y][x] - 1]);
+			if (!over)
+				for (let y = 0; y < piece.length; y++)
+					for (let x = 0; x < piece[y].length; x++)
+						if (piece[y][x]) cell(px + x, py + y, COLORS[color - 1]);
+		}
+		function cell(x, y, c) {
+			ctx.fillStyle = c;
+			ctx.fillRect(x * SIZE + 1, y * SIZE + 1, SIZE - 2, SIZE - 2);
+		}
+		function start() {
+			if (!started && !over) { started = true; statusEl.textContent = 'Playing…'; }
+		}
+		function action(a) {
+			if (over) return;
+			start();
+			if (a === 'left') move(-1);
+			else if (a === 'right') move(1);
+			else if (a === 'rotate') rotate();
+			else if (a === 'down') tick();
+			else if (a === 'drop') hardDrop();
+			draw();
+		}
+		canvas.addEventListener('keydown', (e) => {
+			const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'rotate', ArrowDown: 'down', ' ': 'drop' };
+			if (map[e.key]) { e.preventDefault(); action(map[e.key]); }
+			else if (e.key === 'p' || e.key === 'P') { started = !started && !over ? true : false; statusEl.textContent = started ? 'Playing…' : 'Paused'; }
+		});
+		canvas.setAttribute('tabindex', '0');
+		canvas.addEventListener('pointerdown', () => canvas.focus());
+		document.querySelectorAll('[data-tetris-btn]').forEach((b) =>
+			b.addEventListener('click', () => action(b.getAttribute('data-tetris-btn'))));
+		document.getElementById('tetris-reset').addEventListener('click', () => { clearInterval(dropTimer); reset(); dropTimer = setInterval(tick, 600); });
+		reset();
+		dropTimer = setInterval(tick, 600);
+	})();
+</script>
