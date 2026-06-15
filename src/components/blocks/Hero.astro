@@ -1,6 +1,7 @@
 ---
 import { Image } from 'astro:assets';
 import { tinaField } from '@tinacms/astro/tina-field';
+import { Icon as Iconify } from 'astro-icon/components';
 import Section from '../ui/Section.astro';
 import Button from '../ui/Button.astro';
 import Icon from '../ui/Icon.astro';
@@ -17,6 +18,11 @@ const actions = (data.actions ?? []).filter(a => a !== null);
 	<Aurora />
 	{data.starfield !== false && <Starfield count={70} class="text-foreground/20" />}
 	<div class="relative text-center sm:mx-auto lg:mr-auto">
+		<div aria-hidden="true" class="mb-2 flex items-center justify-center gap-3 text-primary">
+			<span class="h-px w-10 bg-gradient-to-r from-transparent to-border"></span>
+			<Iconify name="tabler:compass" class="size-6" />
+			<span class="h-px w-10 bg-gradient-to-l from-transparent to-border"></span>
+		</div>
 		<div data-tina-field={tinaField(data, 'image')} class="mx-auto mb-6 size-56 md:size-72">
 			{data.image?.src
 				? <Image src={data.image.src} alt={data.image.alt ?? ''} width={576} height={576} sizes="(min-width: 768px) 288px, 224px" format="webp" quality={80} fetchpriority="high" loading="eager" decoding="async" class="size-full rounded-full object-cover" />

@@ -2,6 +2,17 @@
 @import '@fontsource-variable/inter';
 @plugin '@tailwindcss/typography';
 
+/* Maritime theme
+   ---------------
+   A pirate/nautical visual identity layered onto the existing TinaCMS + Astro
+   templates: a weathered ship's-chart palette (deep navy seas, parchment/rope
+   tones, weathered teal, brass accents) wired entirely through the CSS custom
+   properties below, plus a characterful serif display face for headings paired
+   with Inter for readable body copy. Palette tokens are tuned so foreground /
+   background pairings clear WCAG AA (>=4.5:1 for body text, >=3:1 for large
+   headings and UI). No new dependencies — the display face is a web-safe serif
+   stack and all motifs use the already-installed Tabler icon set. */
+
 /* Drive the dark: variant from the .dark class (toggled by ThemeToggle),
    not the prefers-color-scheme media query. */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -18,6 +29,11 @@
 
 @theme inline {
 	--font-sans: 'Inter Variable', 'Inter Fallback', system-ui, sans-serif;
+	/* Characterful display serif for headings — evokes engraved ship's-chart
+	   and ship's-log lettering. Web-safe stack, so no font download or new
+	   dependency: prefers the wide, high-contrast Iowan/Palatino faces, falling
+	   back through Georgia to the platform serif. */
+	--font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Times New Roman', serif;
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -47,52 +63,61 @@
 	--color-chart-5: var(--chart-5);
 }
 
+/* Light mode — "day at sea": a weathered parchment chart. Warm rope/parchment
+   surfaces, deep navy ink, weathered-teal primary and brass accents. */
 :root {
 	--radius: 0.625rem;
-	--background: oklch(0.99 0.004 285);
-	--foreground: oklch(0.20 0.03 285);
-	--card: oklch(1 0.002 285);
-	--card-foreground: oklch(0.20 0.03 285);
-	--popover: oklch(1 0.002 285);
-	--popover-foreground: oklch(0.20 0.03 285);
-	--primary: oklch(0.57 0.198 37);
-	--primary-foreground: oklch(0.99 0.005 285);
-	--secondary: oklch(0.96 0.01 285);
-	--secondary-foreground: oklch(0.30 0.04 285);
-	--muted: oklch(0.96 0.01 285);
-	--muted-foreground: oklch(0.48 0.03 285);
-	--accent: oklch(0.95 0.02 285);
-	--accent-foreground: oklch(0.30 0.05 285);
-	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.90 0.012 285);
-	--input: oklch(0.90 0.012 285);
-	--ring: oklch(0.57 0.198 37);
-	--chart-1: oklch(0.646 0.222 41.116);
-	--chart-2: oklch(0.6 0.118 184.704);
-	--chart-3: oklch(0.398 0.07 227.392);
-	--chart-4: oklch(0.828 0.189 84.429);
-	--chart-5: oklch(0.769 0.188 70.08);
+	--background: oklch(0.965 0.018 88);          /* aged parchment */
+	--foreground: oklch(0.26 0.045 255);          /* deep navy ink */
+	--card: oklch(0.985 0.012 90);                /* lighter parchment */
+	--card-foreground: oklch(0.26 0.045 255);
+	--popover: oklch(0.985 0.012 90);
+	--popover-foreground: oklch(0.26 0.045 255);
+	--primary: oklch(0.46 0.085 220);             /* weathered deep teal */
+	--primary-foreground: oklch(0.98 0.014 90);   /* parchment on teal */
+	--secondary: oklch(0.91 0.026 88);            /* rope / canvas */
+	--secondary-foreground: oklch(0.30 0.05 255); /* navy */
+	--muted: oklch(0.92 0.022 88);
+	--muted-foreground: oklch(0.42 0.04 250);     /* muted navy-slate */
+	--accent: oklch(0.86 0.05 80);                /* soft brass wash */
+	--accent-foreground: oklch(0.30 0.05 255);
+	--destructive: oklch(0.52 0.20 27);           /* signal-flag red */
+	--border: oklch(0.83 0.03 84);                /* rope-coloured rule */
+	--input: oklch(0.83 0.03 84);
+	--ring: oklch(0.55 0.11 78);                  /* brass focus ring */
+	--chart-1: oklch(0.46 0.085 220);             /* teal */
+	--chart-2: oklch(0.58 0.10 78);               /* brass */
+	--chart-3: oklch(0.40 0.07 250);              /* navy */
+	--chart-4: oklch(0.55 0.10 200);              /* sea green */
+	--chart-5: oklch(0.52 0.20 27);               /* signal red */
 }
 
+/* Dark mode — "night voyage": deep ocean navy seas, parchment/rope ink,
+   brass primary and accents glinting like lantern light. */
 .dark {
-	--background: oklch(0.16 0.02 285);
-	--foreground: oklch(0.95 0.012 285);
-	--card: oklch(0.21 0.025 285);
-	--card-foreground: oklch(0.95 0.012 285);
-	--popover: oklch(0.21 0.025 285);
-	--popover-foreground: oklch(0.95 0.012 285);
-	--primary: oklch(0.70 0.18 40);
-	--primary-foreground: oklch(0.16 0.02 285);
-	--secondary: oklch(0.26 0.03 285);
-	--secondary-foreground: oklch(0.95 0.012 285);
-	--muted: oklch(0.26 0.03 285);
-	--muted-foreground: oklch(0.72 0.03 285);
-	--accent: oklch(0.28 0.04 285);
-	--accent-foreground: oklch(0.95 0.012 285);
-	--destructive: oklch(0.70 0.19 22);
-	--border: oklch(0.95 0.01 285 / 12%);
-	--input: oklch(0.95 0.01 285 / 15%);
-	--ring: oklch(0.70 0.18 40);
+	--background: oklch(0.19 0.04 252);           /* deep ocean navy */
+	--foreground: oklch(0.93 0.022 88);           /* parchment ink */
+	--card: oklch(0.24 0.045 252);                /* lifted navy hull */
+	--card-foreground: oklch(0.93 0.022 88);
+	--popover: oklch(0.24 0.045 252);
+	--popover-foreground: oklch(0.93 0.022 88);
+	--primary: oklch(0.74 0.115 80);              /* lantern brass */
+	--primary-foreground: oklch(0.20 0.04 252);   /* navy on brass */
+	--secondary: oklch(0.30 0.05 250);            /* weathered navy */
+	--secondary-foreground: oklch(0.93 0.022 88);
+	--muted: oklch(0.30 0.05 250);
+	--muted-foreground: oklch(0.78 0.035 84);     /* faded rope */
+	--accent: oklch(0.36 0.06 215);               /* deep teal accent */
+	--accent-foreground: oklch(0.95 0.02 88);
+	--destructive: oklch(0.66 0.18 25);
+	--border: oklch(0.85 0.04 84 / 14%);          /* rope rule, low alpha */
+	--input: oklch(0.85 0.04 84 / 16%);
+	--ring: oklch(0.74 0.115 80);                 /* brass focus ring */
+	--chart-1: oklch(0.74 0.115 80);              /* brass */
+	--chart-2: oklch(0.62 0.10 200);              /* teal */
+	--chart-3: oklch(0.70 0.08 250);              /* sky navy */
+	--chart-4: oklch(0.66 0.10 165);              /* sea green */
+	--chart-5: oklch(0.66 0.18 25);               /* signal red */
 }
 
 @layer base {
@@ -109,6 +134,33 @@
 	.bg-default {
 		background-color: var(--background);
 	}
+	/* Nautical display headings: the serif face carries the ship's-chart
+	   character while Inter keeps body copy readable. Applies site-wide to
+	   real heading elements; prose headings inherit it via the .prose rule. */
+	h1, h2, h3 {
+		font-family: var(--font-serif);
+		letter-spacing: -0.01em;
+	}
+}
+
+/* Themed serif heading font for blog/MDX prose, matching the site headings. */
+.prose :is(h1, h2, h3, h4) {
+	font-family: var(--font-serif);
+}
+
+/* Rope-style divider: a short braided rule used as a maritime UI accent under
+   the header and around section breaks. Pure CSS, theme-token coloured. */
+.rope-divider {
+	height: 3px;
+	border: 0;
+	background-image: repeating-linear-gradient(
+		90deg,
+		var(--ring) 0,
+		var(--ring) 6px,
+		transparent 6px,
+		transparent 12px
+	);
+	opacity: 0.5;
 }
 
 /* Prose (blog body) follows the theme tokens so it inverts in dark mode and
