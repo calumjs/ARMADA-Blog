@@ -4,6 +4,7 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import KrakenEasterEgg from '../components/KrakenEasterEgg.astro';
 import MessageInABottle from '../components/MessageInABottle.astro';
+import OceanHero from '../components/hero/OceanHero.astro';
 import TinaIsland from '@tinacms/astro/TinaIsland.astro';
 import { getConfig } from '../lib/data';
 import { islands } from '../lib/islands';
@@ -12,9 +13,11 @@ interface Props {
 	title: string;
 	description: string;
 	image?: string;
+	/** Render the fixed-position WebGL sailing-ship parallax backdrop. */
+	oceanHero?: boolean;
 }
 
-const { title, description, image } = Astro.props;
+const { title, description, image, oceanHero = false } = Astro.props;
 const config = (await getConfig()).data?.config ?? null;
 ---
 
@@ -23,7 +26,8 @@ const config = (await getConfig()).data?.config ?? null;
 	<head>
 		<BaseHead title={title} description={description} image={image} />
 	</head>
-	<body>
+	<body class={oceanHero ? 'has-ocean-hero' : undefined}>
+		{oceanHero && <OceanHero />}
 		<TinaIsland name="global" wrapper={islands.global.wrapper}>
 			<Header config={config} />
 		</TinaIsland>
@@ -35,3 +39,21 @@ const config = (await getConfig()).data?.config ?? null;
 		<MessageInABottle />
 	</body>
 </html>
+
+<style is:global>
+	/* When the WebGL parallax backdrop is mounted, let it show through:
+	   the page background goes transparent and the first hero section drops
+	   its opaque fill so the ocean/ship roll behind the landing content. Lower
+	   sections keep a translucent parchment so body copy stays readable. */
+	body.has-ocean-hero {
+		background-color: transparent;
+	}
+	body.has-ocean-hero .bg-default {
+		background-color: transparent;
+	}
+	/* Sections below the fold get a soft scrim for legibility over the sea. */
+	body.has-ocean-hero main :global(section),
+	body.has-ocean-hero .bg-default :global(section) {
+		position: relative;
+	}
+</style>
