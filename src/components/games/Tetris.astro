@@ -8,13 +8,24 @@ import Leaderboard from './Leaderboard.astro';
 	title="Tetris"
 	instructions="Arrow keys: move/rotate, Down to soft-drop, Space to hard-drop, P to pause. On touch: use the buttons."
 >
-	<canvas
-		id="tetris-canvas"
-		width="240"
-		height="480"
-		class="w-full max-w-[240px] touch-none rounded-md border bg-background"
-	></canvas>
-	<p class="text-sm font-medium">Score: <span id="tetris-score">0</span> · <span id="tetris-status">Press any arrow key to start</span></p>
+	<div class="flex items-start gap-3">
+		<canvas
+			id="tetris-canvas"
+			width="240"
+			height="480"
+			class="w-full max-w-[240px] touch-none rounded-md border bg-background"
+		></canvas>
+		<div class="flex flex-col gap-1">
+			<p class="text-xs font-medium text-muted-foreground">Next</p>
+			<canvas
+				id="tetris-next"
+				width="96"
+				height="96"
+				class="rounded-md border bg-background"
+			></canvas>
+		</div>
+	</div>
+	<p class="text-sm font-medium">Score: <span id="tetris-score">0</span> · Level: <span id="tetris-level">1</span> · Lines: <span id="tetris-lines">0</span> · <span id="tetris-status">Press any arrow key to start</span></p>
 	<div class="grid grid-cols-5 gap-2 sm:hidden">
 		<button data-tetris-btn="left" class="rounded-md border bg-background px-3 py-2 text-sm">◀</button>
 		<button data-tetris-btn="rotate" class="rounded-md border bg-background px-3 py-2 text-sm">⟳</button>
@@ -44,24 +55,48 @@ import Leaderboard from './Leaderboard.astro';
 		];
 		const scoreEl = document.getElementById('tetris-score');
 		const statusEl = document.getElementById('tetris-status');
-		let grid, piece, px, py, color, score, over, started, dropTimer;
+		const levelEl = document.getElementById('tetris-level');
+		const linesEl = document.getElementById('tetris-lines');
+		const nextCanvas = document.getElementById('tetris-next');
+		const nextCtx = nextCanvas ? nextCanvas.getContext('2d') : null;
+		const BASE_INTERVAL = 600, MIN_INTERVAL = 100;
+		let grid, piece, px, py, color, nextIndex, score, lines, level, over, started, dropTimer, interval;
+
+		// Drop interval shortens as the level climbs; level advances every 10 cleared lines.
+		function levelFor(totalLines) { return Math.floor(totalLines / 10) + 1; }
+		function intervalFor(lvl) { return Math.max(MIN_INTERVAL, BASE_INTERVAL - (lvl - 1) * 60); }
+		function applySpeed() {
+			const newInterval = intervalFor(level);
+			if (newInterval === interval) return;
+			interval = newInterval;
+			// Only re-arm the timer while actively playing so pause stays frozen.
+			if (started && !over) { clearInterval(dropTimer); dropTimer = setInterval(tick, interval); }
+		}
+		function randomIndex() { return Math.floor(Math.random() * SHAPES.length); }
 
 		function reset() {
 			grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
-			score = 0; over = false; started = false;
+			score = 0; lines = 0; level = 1; over = false; started = false;
+			interval = BASE_INTERVAL;
+			nextIndex = randomIndex();
 			scoreEl.textContent = '0';
+			levelEl.textContent = '1';
+			linesEl.textContent = '0';
 			statusEl.textContent = 'Press any arrow key to start';
 			spawn();
 			draw();
 		}
 		function spawn() {
-			const i = Math.floor(Math.random() * SHAPES.length);
+			const i = nextIndex;
+			nextIndex = randomIndex();
 			piece = SHAPES[i].map((r) => r.slice());
 			color = i + 1;
 			px = Math.floor((COLS - piece[0].length) / 2);
 			py = 0;
+			drawNext();
 			if (collides(piece, px, py)) {
 				over = true; started = false;
+				clearInterval(dropTimer);
 				statusEl.textContent = 'Game over! Press Restart.';
 				if (score > 0 && window.ArmadaHighScores)
 					window.ArmadaHighScores.recordScore('tetris', score, { lowerIsBetter: false });
@@ -91,7 +126,24 @@ import Leaderboard from './Leaderboard.astro';
 					cleared++; y++;
 				}
 			}
-			if (cleared) { score += cleared * 100; scoreEl.textContent = String(score); }
+			if (cleared) {
+				score += cleared * 100;
+				lines += cleared;
+				scoreEl.textContent = String(score);
+				linesEl.textContent = String(lines);
+				const newLevel = levelFor(lines);
+				if (newLevel !== level) {
+					level = newLevel;
+					levelEl.textContent = String(level);
+					applySpeed();
+				}
+			}
+		}
+		// Row the current piece would settle on if dropped straight down (for the ghost).
+		function landingRow() {
+			let y = py;
+			while (!collides(piece, px, y + 1)) y++;
+			return y;
 		}
 		function rotate() {
 			const r = piece[0].map((_, i) => piece.map((row) => row[i]).reverse());
@@ -105,7 +157,10 @@ import Leaderboard from './Leaderboard.astro';
 			draw();
 		}
 		function hardDrop() {
-			while (!collides(piece, px, py + 1)) py++;
+			const dist = landingRow() - py;
+			py += dist > 0 ? dist : 0;
+			// Reward the instant drop: 2 points per cell fallen.
+			if (dist > 0) { score += dist * 2; scoreEl.textContent = String(score); }
 			merge(); clearLines(); spawn(); draw();
 		}
 		function draw() {
@@ -114,14 +169,44 @@ import Leaderboard from './Leaderboard.astro';
 			for (let y = 0; y < ROWS; y++)
 				for (let x = 0; x < COLS; x++)
 					if (grid[y][x]) cell(x, y, COLORS[grid[y][x] - 1]);
-			if (!over)
+			if (!over) {
+				// Ghost piece: translucent silhouette at the landing row.
+				const gy = landingRow();
+				if (gy !== py)
+					for (let y = 0; y < piece.length; y++)
+						for (let x = 0; x < piece[y].length; x++)
+							if (piece[y][x]) ghostCell(px + x, gy + y, COLORS[color - 1]);
 				for (let y = 0; y < piece.length; y++)
 					for (let x = 0; x < piece[y].length; x++)
 						if (piece[y][x]) cell(px + x, py + y, COLORS[color - 1]);
+			}
 		}
 		function cell(x, y, c) {
 			ctx.fillStyle = c;
 			ctx.fillRect(x * SIZE + 1, y * SIZE + 1, SIZE - 2, SIZE - 2);
+		}
+		function ghostCell(x, y, c) {
+			ctx.save();
+			ctx.globalAlpha = 0.25;
+			ctx.fillStyle = c;
+			ctx.fillRect(x * SIZE + 1, y * SIZE + 1, SIZE - 2, SIZE - 2);
+			ctx.restore();
+		}
+		function drawNext() {
+			if (!nextCtx) return;
+			nextCtx.fillStyle = '#0b1020';
+			nextCtx.fillRect(0, 0, nextCanvas.width, nextCanvas.height);
+			const shape = SHAPES[nextIndex];
+			const c = COLORS[nextIndex];
+			const cw = shape[0].length, ch = shape.length;
+			const ns = 20;
+			const offX = Math.floor((nextCanvas.width - cw * ns) / 2);
+			const offY = Math.floor((nextCanvas.height - ch * ns) / 2);
+			nextCtx.fillStyle = c;
+			for (let y = 0; y < ch; y++)
+				for (let x = 0; x < cw; x++)
+					if (shape[y][x])
+						nextCtx.fillRect(offX + x * ns + 1, offY + y * ns + 1, ns - 2, ns - 2);
 		}
 		function start() {
 			if (!started && !over) { started = true; statusEl.textContent = 'Playing…'; }
@@ -145,7 +230,7 @@ import Leaderboard from './Leaderboard.astro';
 					statusEl.textContent = started ? 'Playing…' : 'Paused';
 					// Stop/restart the drop interval so a paused board genuinely freezes.
 					clearInterval(dropTimer);
-					if (started) dropTimer = setInterval(tick, 600);
+					if (started) dropTimer = setInterval(tick, interval);
 				}
 			}
 		});
@@ -153,11 +238,11 @@ import Leaderboard from './Leaderboard.astro';
 		canvas.addEventListener('pointerdown', () => canvas.focus());
 		document.querySelectorAll('[data-tetris-btn]').forEach((b) =>
 			b.addEventListener('click', () => action(b.getAttribute('data-tetris-btn'))));
-		document.getElementById('tetris-reset').addEventListener('click', () => { clearInterval(dropTimer); reset(); dropTimer = setInterval(tick, 600); });
+		document.getElementById('tetris-reset').addEventListener('click', () => { clearInterval(dropTimer); reset(); dropTimer = setInterval(tick, interval); });
 		// ClientRouter swaps the DOM without a full reload; clear the drop interval before the
 		// swap so it stops firing against the removed games page (and can't stack on re-entry).
 		document.addEventListener('astro:before-swap', () => { clearInterval(dropTimer); }, { once: true });
 		reset();
-		dropTimer = setInterval(tick, 600);
+		dropTimer = setInterval(tick, interval);
 	})();
 </script>
