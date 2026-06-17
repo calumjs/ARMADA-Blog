@@ -1,0 +1,270 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="sinkthefleet"
+	title="Sink the Fleet"
+	instructions="Fire on the enemy waters (left grid) by clicking a cell — sink the whole hidden fleet before the computer sinks yours. Your own fleet (right grid) shows where the enemy is firing. Use arrow keys + Enter to aim with the keyboard."
+>
+	<div class="flex w-full max-w-2xl flex-col gap-4">
+		<div class="grid gap-4 sm:grid-cols-2">
+			<div class="flex flex-col items-center gap-2">
+				<h3 class="text-sm font-semibold tracking-tight">Enemy waters</h3>
+				<div id="stf-enemy" class="grid touch-none gap-0.5 rounded-md border bg-background p-1 select-none" role="grid" aria-label="Enemy waters — fire here"></div>
+			</div>
+			<div class="flex flex-col items-center gap-2">
+				<h3 class="text-sm font-semibold tracking-tight">Your fleet</h3>
+				<div id="stf-player" class="grid gap-0.5 rounded-md border bg-background p-1 select-none" role="grid" aria-label="Your fleet"></div>
+			</div>
+		</div>
+		<p class="text-center text-sm font-medium" id="stf-status">Your turn — fire on the enemy fleet.</p>
+		<p class="text-center text-xs text-muted-foreground">
+			Enemy ships left: <span id="stf-enemy-left">0</span> · Your ships left: <span id="stf-player-left">0</span>
+		</p>
+		<div class="flex justify-center">
+			<button id="stf-reset" class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent">New game</button>
+		</div>
+	</div>
+</GameShell>
+
+<script is:inline>
+	(() => {
+		const enemyBoard = document.getElementById('stf-enemy');
+		if (!enemyBoard) return;
+		const playerBoard = document.getElementById('stf-player');
+		const statusEl = document.getElementById('stf-status');
+		const enemyLeftEl = document.getElementById('stf-enemy-left');
+		const playerLeftEl = document.getElementById('stf-player-left');
+		const resetBtn = document.getElementById('stf-reset');
+
+		const SIZE = 8;
+		// Classic battleship fleet sizes.
+		const FLEET = [4, 3, 3, 2, 2];
+
+		let enemyShips, playerShips; // 2D arrays: ship id or 0 (water)
+		let enemyHit, playerHit; // 2D booleans: cell has been fired upon
+		let enemyCells, playerCells; // DOM buttons / divs
+		let enemyShipHits, playerShipHits; // remaining cells per ship id
+		let enemyShipsLeft, playerShipsLeft;
+		let over, aiPending, aiTimer;
+		let cursorX = 0, cursorY = 0;
+
+		// AI state for hunt-around-a-hit targeting.
+		let aiQueue; // candidate cells to try after a hit
+		let aiTried; // 2D booleans of cells the AI already fired at
+
+		function emptyGrid(fill) {
+			return Array.from({ length: SIZE }, () => Array(SIZE).fill(fill));
+		}
+
+		function placeFleet() {
+			const grid = emptyGrid(0);
+			const hits = {};
+			let id = 1;
+			for (const len of FLEET) {
+				let placed = false;
+				while (!placed) {
+					const horizontal = Math.random() < 0.5;
+					const x = Math.floor(Math.random() * (horizontal ? SIZE - len + 1 : SIZE));
+					const y = Math.floor(Math.random() * (horizontal ? SIZE : SIZE - len + 1));
+					let ok = true;
+					for (let i = 0; i < len; i++) {
+						const cx = horizontal ? x + i : x;
+						const cy = horizontal ? y : y + i;
+						if (grid[cy][cx] !== 0) { ok = false; break; }
+					}
+					if (!ok) continue;
+					for (let i = 0; i < len; i++) {
+						const cx = horizontal ? x + i : x;
+						const cy = horizontal ? y : y + i;
+						grid[cy][cx] = id;
+					}
+					hits[id] = len;
+					id++;
+					placed = true;
+				}
+			}
+			return { grid, hits };
+		}
+
+		function buildBoard(boardEl, interactive) {
+			boardEl.style.gridTemplateColumns = `repeat(${SIZE}, 1.75rem)`;
+			boardEl.innerHTML = '';
+			const cells = [];
+			for (let y = 0; y < SIZE; y++) {
+				cells[y] = [];
+				for (let x = 0; x < SIZE; x++) {
+					const c = document.createElement(interactive ? 'button' : 'div');
+					c.className = 'flex size-7 items-center justify-center rounded-sm border bg-muted text-xs font-bold';
+					c.dataset.x = String(x); c.dataset.y = String(y);
+					if (interactive) {
+						c.setAttribute('aria-label', `Fire at column ${x + 1}, row ${y + 1}`);
+						c.addEventListener('click', () => fire(x, y));
+					}
+					boardEl.appendChild(c);
+					cells[y][x] = c;
+				}
+			}
+			return cells;
+		}
+
+		function reset() {
+			clearTimeout(aiTimer); aiPending = false;
+			over = false;
+			const enemy = placeFleet();
+			const player = placeFleet();
+			enemyShips = enemy.grid; enemyShipHits = enemy.hits;
+			playerShips = player.grid; playerShipHits = player.hits;
+			enemyHit = emptyGrid(false); playerHit = emptyGrid(false);
+			enemyShipsLeft = FLEET.length; playerShipsLeft = FLEET.length;
+			aiQueue = []; aiTried = emptyGrid(false);
+			cursorX = 0; cursorY = 0;
+
+			enemyCells = buildBoard(enemyBoard, true);
+			playerCells = buildBoard(playerBoard, false);
+			// Reveal the player's own ships (enemy fleet stays hidden).
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					if (playerShips[y][x]) {
+						playerCells[y][x].classList.remove('bg-muted');
+						playerCells[y][x].classList.add('bg-slate-500');
+					}
+
+			enemyLeftEl.textContent = String(enemyShipsLeft);
+			playerLeftEl.textContent = String(playerShipsLeft);
+			statusEl.textContent = 'Your turn — fire on the enemy fleet.';
+			updateCursor();
+		}
+
+		function updateCursor() {
+			if (!enemyCells) return;
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					enemyCells[y][x].classList.toggle('ring-2', false);
+			if (!over) {
+				const c = enemyCells[cursorY][cursorX];
+				c.classList.add('ring-2');
+			}
+		}
+
+		function markHit(cell) {
+			cell.classList.remove('bg-muted', 'bg-slate-500');
+			cell.classList.add('bg-red-500');
+			cell.textContent = '✷';
+		}
+		function markMiss(cell) {
+			cell.classList.remove('bg-muted', 'bg-slate-500');
+			cell.classList.add('bg-sky-700');
+			cell.textContent = '·';
+		}
+
+		function fire(x, y) {
+			if (over || aiPending || enemyHit[y][x]) return;
+			enemyHit[y][x] = true;
+			const id = enemyShips[y][x];
+			const cell = enemyCells[y][x];
+			if (id) {
+				markHit(cell);
+				enemyShipHits[id]--;
+				if (enemyShipHits[id] === 0) {
+					enemyShipsLeft--;
+					enemyLeftEl.textContent = String(enemyShipsLeft);
+					if (enemyShipsLeft === 0) return finish(true);
+					statusEl.textContent = 'Direct hit — enemy ship sunk! Fire again.';
+				} else {
+					statusEl.textContent = 'Direct hit! Fire again.';
+				}
+				// Player keeps firing on a hit.
+				return;
+			}
+			markMiss(cell);
+			statusEl.textContent = 'Miss. Enemy is returning fire…';
+			aiPending = true;
+			aiTimer = setTimeout(aiTurn, 500);
+		}
+
+		function aiTurn() {
+			aiPending = false;
+			if (over) return;
+			let keepFiring = true;
+			while (keepFiring && !over) {
+				const target = pickAiTarget();
+				if (!target) { over = true; return; }
+				const { x, y } = target;
+				aiTried[y][x] = true;
+				playerHit[y][x] = true;
+				const id = playerShips[y][x];
+				const cell = playerCells[y][x];
+				if (id) {
+					markHit(cell);
+					playerShipHits[id]--;
+					// Queue orthogonal neighbours to hunt the rest of this ship.
+					for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+						const nx = x + dx, ny = y + dy;
+						if (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE && !aiTried[ny][nx])
+							aiQueue.push({ x: nx, y: ny });
+					}
+					if (playerShipHits[id] === 0) {
+						playerShipsLeft--;
+						playerLeftEl.textContent = String(playerShipsLeft);
+						if (playerShipsLeft === 0) return finish(false);
+					}
+					// AI fires again after a hit.
+				} else {
+					markMiss(cell);
+					keepFiring = false;
+				}
+			}
+			if (!over) statusEl.textContent = 'Your turn — fire on the enemy fleet.';
+		}
+
+		function pickAiTarget() {
+			// Prefer queued hunt cells.
+			while (aiQueue.length) {
+				const t = aiQueue.shift();
+				if (!aiTried[t.y][t.x]) return t;
+			}
+			// Otherwise random untried cell (parity hunt for efficiency).
+			const candidates = [];
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					if (!aiTried[y][x] && (x + y) % 2 === 0) candidates.push({ x, y });
+			if (candidates.length) return candidates[Math.floor(Math.random() * candidates.length)];
+			const all = [];
+			for (let y = 0; y < SIZE; y++)
+				for (let x = 0; x < SIZE; x++)
+					if (!aiTried[y][x]) all.push({ x, y });
+			if (all.length) return all[Math.floor(Math.random() * all.length)];
+			return null;
+		}
+
+		function finish(playerWon) {
+			over = true;
+			clearTimeout(aiTimer); aiPending = false;
+			updateCursor();
+			statusEl.textContent = playerWon
+				? 'Victory! You sank the entire enemy fleet. 🎉'
+				: 'Defeat — the enemy sank your fleet.';
+		}
+
+		// Keyboard control over the enemy board.
+		enemyBoard.addEventListener('keydown', (e) => {
+			if (over) return;
+			let handled = true;
+			if (e.key === 'ArrowRight') cursorX = Math.min(SIZE - 1, cursorX + 1);
+			else if (e.key === 'ArrowLeft') cursorX = Math.max(0, cursorX - 1);
+			else if (e.key === 'ArrowDown') cursorY = Math.min(SIZE - 1, cursorY + 1);
+			else if (e.key === 'ArrowUp') cursorY = Math.max(0, cursorY - 1);
+			else if (e.key === 'Enter' || e.key === ' ') fire(cursorX, cursorY);
+			else handled = false;
+			if (handled) { e.preventDefault(); updateCursor(); }
+		});
+		// Make the board focusable so it can receive key events.
+		enemyBoard.tabIndex = 0;
+
+		resetBtn.addEventListener('click', reset);
+		document.addEventListener('astro:before-swap', () => { clearTimeout(aiTimer); aiPending = false; }, { once: true });
+		reset();
+	})();
+</script>
