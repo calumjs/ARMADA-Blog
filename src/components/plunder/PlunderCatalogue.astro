@@ -4,9 +4,9 @@
 // CRITICAL: This is purely for fun. There is NO real checkout, NO payment
 // provider, NO money handling, NO backend and NO external network calls.
 // Every product, price and illustration is STATIC data defined right here in
-// the repo; illustrations are inline SVG (no hotlinked images). The optional
-// "booty" cart is a cosmetic counter persisted to localStorage — no doubloons
-// ever change hands.
+// the repo; illustrations are inline SVG (no hotlinked images). The "loot bag"
+// cart (quantities, running doubloon total, jest checkout) is purely cosmetic
+// and persisted to localStorage — no doubloons EVER change hands.
 //
 // Matches the games / shipyard island pattern: scoped markup, theme-aware
 // colours via CSS variables, and a single inline IIFE that re-binds itself on
@@ -191,10 +191,10 @@ const products = [
 	<p class="rounded-lg border border-dashed bg-background px-4 py-3 text-sm text-muted-foreground">
 		🦜 <strong>Just for fun, me hearty.</strong> Polly's Plunder is a make-believe
 		market — this be just for fun, no real doubloons charged. There be no checkout,
-		no payments and no real wares: your "booty" lives only in this browser.
+		no payments and no real wares: your loot bag lives only in this browser.
 	</p>
 
-	<!-- Filter tabs + booty button -->
+	<!-- Filter tabs + loot-bag button -->
 	<div class="flex flex-wrap items-center justify-between gap-3">
 		<nav id="pp-filters" class="flex flex-wrap gap-2" aria-label="Filter plunder by range">
 			{categories.map((c) => (
@@ -211,34 +211,94 @@ const products = [
 			id="pp-booty-toggle"
 			type="button"
 			class="rounded-md border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
+			aria-haspopup="dialog"
 			aria-expanded="false"
 			aria-controls="pp-booty-panel"
-		>View booty (<span id="pp-booty-count">0</span>)</button>
+		>🎒 Loot bag (<span id="pp-booty-count">0</span>)</button>
 	</div>
 
-	<!-- Booty panel (cosmetic, local only) -->
+	<!-- Loot-bag drawer (cosmetic, local only). A right-hand slide-out panel. -->
 	<div
+		id="pp-booty-overlay"
+		hidden
+		class="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+	></div>
+	<aside
 		id="pp-booty-panel"
 		hidden
-		class="flex flex-col gap-3 rounded-lg border bg-background p-4"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="pp-booty-title"
+		tabindex="-1"
+		class="fixed inset-y-0 right-0 z-50 flex w-full max-w-sm flex-col gap-4 border-l bg-background p-5 shadow-2xl outline-none"
 	>
 		<div class="flex items-center justify-between gap-2">
-			<h2 class="text-lg font-semibold tracking-tight">Yer Booty Sack</h2>
+			<h2 id="pp-booty-title" class="text-lg font-semibold tracking-tight">Yer Loot Bag 🎒</h2>
+			<button
+				id="pp-booty-close"
+				type="button"
+				aria-label="Close loot bag"
+				class="rounded-md border px-2 py-1 text-sm text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
+			>✕</button>
+		</div>
+
+		<!-- Scrolling list of looted wares with qty controls -->
+		<ul id="pp-booty-list" class="flex flex-1 flex-col gap-2 overflow-y-auto text-sm"></ul>
+
+		<p id="pp-booty-empty" class="flex-1 text-sm text-muted-foreground">
+			Yer bag be lighter than a gull's feather. Plunder a trinket or two —
+			it's all pretend, naturally, so go wild, ye magnificent scallywag.
+		</p>
+
+		<!-- Running total -->
+		<div class="flex items-center justify-between border-t pt-3 text-sm font-medium">
+			<span>Total plunder</span>
+			<span
+				id="pp-booty-total"
+				aria-live="polite"
+				class="tabular-nums"
+			>0 doubloons</span>
+		</div>
+
+		<div class="flex flex-col gap-2">
+			<button
+				id="pp-booty-checkout"
+				type="button"
+				class="rounded-md border bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90 focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none disabled:cursor-not-allowed disabled:opacity-50"
+			>Plunder responsibly (jest checkout) 🏴‍☠️</button>
 			<button
 				id="pp-booty-clear"
 				type="button"
 				class="rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
-			>Empty the sack</button>
+			>Empty the bag</button>
 		</div>
-		<ul id="pp-booty-list" class="flex flex-col gap-1 text-sm"></ul>
-		<p id="pp-booty-empty" class="text-sm text-muted-foreground">
-			Yer sack be empty. Add a trinket or two — it's all pretend, naturally.
-		</p>
+
+		<!-- Jest-checkout receipt (a goofy keepsake; no money moved) -->
+		<div
+			id="pp-booty-receipt"
+			hidden
+			role="status"
+			class="flex flex-col gap-2 rounded-lg border border-dashed bg-card p-4 text-sm text-card-foreground"
+		>
+			<p class="text-base font-semibold">🦜 Ye plundered responsibly!</p>
+			<p id="pp-receipt-line" class="text-muted-foreground"></p>
+			<p class="text-2xl font-bold tabular-nums text-primary">0 doubloons taken</p>
+			<p class="text-xs text-muted-foreground">
+				No order was placed. No doubloons were charged. Nothing was sent
+				anywhere. 'Twas all a jolly jest — yer real coin is safe in its chest.
+			</p>
+			<button
+				id="pp-receipt-dismiss"
+				type="button"
+				class="self-start rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none"
+			>Aye, splendid</button>
+		</div>
+
 		<p class="text-xs text-muted-foreground">
-			This sack is purely cosmetic and stored only in your browser. No order is
+			This bag is purely cosmetic and stored only in your browser. No order is
 			placed, no doubloons are charged, nothing is sent anywhere.
 		</p>
-	</div>
+	</aside>
 
 	<!-- Product grid -->
 	<div
@@ -265,7 +325,7 @@ const products = [
 					data-id={p.id}
 					data-name={p.name}
 					data-price={p.price}
-				>Add to booty 🏴‍☠️</button>
+				>Add to bag 🏴‍☠️</button>
 			</article>
 		))}
 	</div>
@@ -281,6 +341,15 @@ const products = [
 		background-color: color-mix(in srgb, var(--primary) 15%, transparent);
 		color: var(--foreground);
 	}
+	#pp-booty-panel {
+		transition: transform 0.2s ease;
+	}
+	#pp-booty-panel[hidden] {
+		display: none;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		#pp-booty-panel { transition: none; }
+	}
 </style>
 
 <script is:inline>
@@ -289,85 +358,231 @@ const products = [
 		if (!root || root.dataset.bound === '1') return;
 		root.dataset.bound = '1';
 
+		// Cosmetic, local-only loot bag. Reuses the existing key so older booty
+		// sacks (flat {name, price} arrays) migrate forward into the new model.
 		const STORE_KEY = 'pollys-plunder-booty';
+		const MAX_LINES = 60;   // distinct products
+		const MAX_QTY = 99;     // per product
 
 		const cards = Array.from(root.querySelectorAll('.pp-card'));
 		const filters = Array.from(root.querySelectorAll('.pp-filter'));
 		const noResults = document.getElementById('pp-no-results');
 
 		const bootyToggle = document.getElementById('pp-booty-toggle');
+		const overlay = document.getElementById('pp-booty-overlay');
 		const bootyPanel = document.getElementById('pp-booty-panel');
 		const bootyCount = document.getElementById('pp-booty-count');
 		const bootyList = document.getElementById('pp-booty-list');
 		const bootyEmpty = document.getElementById('pp-booty-empty');
+		const bootyTotal = document.getElementById('pp-booty-total');
 		const bootyClear = document.getElementById('pp-booty-clear');
+		const bootyClose = document.getElementById('pp-booty-close');
+		const checkoutBtn = document.getElementById('pp-booty-checkout');
+		const receipt = document.getElementById('pp-booty-receipt');
+		const receiptLine = document.getElementById('pp-receipt-line');
+		const receiptDismiss = document.getElementById('pp-receipt-dismiss');
 
-		// ---- Cosmetic local-only booty store (guarded against bad data) ----
+		// Parse the leading number out of a price string like "18 doubloons".
+		function priceNum(price) {
+			const m = String(price).match(/\d+/);
+			return m ? parseInt(m[0], 10) : 0;
+		}
+
+		// ---- Cosmetic local-only loot store (guarded against bad data) ----
+		// Model: array of { id, name, price, qty }. Old flat arrays of
+		// { name, price } are coalesced by name into qty'd lines on load.
 		function load() {
 			try {
 				const raw = localStorage.getItem(STORE_KEY);
 				if (!raw) return [];
 				const arr = JSON.parse(raw);
 				if (!Array.isArray(arr)) return [];
-				return arr
-					.filter((i) => i && typeof i === 'object' &&
-						typeof i.name === 'string' && typeof i.price === 'string')
-					.map((i) => ({
-						name: i.name.slice(0, 80),
-						price: i.price.slice(0, 40),
-					}))
-					.slice(0, 200);
+				const byKey = new Map();
+				for (const i of arr) {
+					if (!i || typeof i !== 'object') continue;
+					if (typeof i.name !== 'string' || typeof i.price !== 'string') continue;
+					const name = i.name.slice(0, 80);
+					const price = i.price.slice(0, 40);
+					const id = typeof i.id === 'string' ? i.id.slice(0, 80) : name;
+					let qty = Number.isFinite(i.qty) ? Math.floor(i.qty) : 1;
+					if (qty < 1) qty = 1;
+					if (qty > MAX_QTY) qty = MAX_QTY;
+					const existing = byKey.get(id);
+					if (existing) {
+						existing.qty = Math.min(MAX_QTY, existing.qty + qty);
+					} else if (byKey.size < MAX_LINES) {
+						byKey.set(id, { id, name, price, qty });
+					}
+				}
+				return Array.from(byKey.values());
 			} catch { return []; }
 		}
 		function save(items) {
 			try { localStorage.setItem(STORE_KEY, JSON.stringify(items)); } catch {}
 		}
 
+		function totals(items) {
+			let units = 0;
+			let doubloons = 0;
+			for (const i of items) {
+				units += i.qty;
+				doubloons += priceNum(i.price) * i.qty;
+			}
+			return { units, doubloons };
+		}
+
+		// Mutate one line's qty by delta; remove when it hits zero.
+		function changeQty(id, delta) {
+			const items = load();
+			const idx = items.findIndex((i) => i.id === id);
+			if (idx === -1) return;
+			items[idx].qty += delta;
+			if (items[idx].qty < 1) items.splice(idx, 1);
+			else if (items[idx].qty > MAX_QTY) items[idx].qty = MAX_QTY;
+			save(items);
+			renderBooty();
+		}
+		function removeLine(id) {
+			save(load().filter((i) => i.id !== id));
+			renderBooty();
+		}
+
+		function makeBtn(label, ariaLabel, cls) {
+			const b = document.createElement('button');
+			b.type = 'button';
+			b.className = cls;
+			b.textContent = label;          // textContent — no innerHTML
+			b.setAttribute('aria-label', ariaLabel);
+			return b;
+		}
+
 		function renderBooty() {
 			const items = load();
-			bootyCount.textContent = String(items.length);
-			bootyList.textContent = '';
+			const { units, doubloons } = totals(items);
+			bootyCount.textContent = String(units);
+			bootyTotal.textContent = doubloons + (doubloons === 1 ? ' doubloon' : ' doubloons');
 			bootyEmpty.hidden = items.length > 0;
+			checkoutBtn.disabled = items.length === 0;
+
+			bootyList.textContent = '';
 			items.forEach((item) => {
 				const li = document.createElement('li');
-				li.className = 'flex items-center justify-between gap-2 border-b border-border/50 py-1 last:border-b-0';
+				li.className = 'flex flex-col gap-1 rounded-md border bg-card p-2';
+
+				const top = document.createElement('div');
+				top.className = 'flex items-start justify-between gap-2';
 				const name = document.createElement('span');
-				name.className = 'truncate';
-				name.textContent = item.name; // textContent — no injection
+				name.className = 'font-medium leading-tight';
+				name.textContent = item.name;     // textContent — no injection
 				const price = document.createElement('span');
-				price.className = 'shrink-0 text-muted-foreground';
+				price.className = 'shrink-0 text-xs text-muted-foreground';
 				price.textContent = item.price;
-				li.append(name, price);
+				top.append(name, price);
+
+				const bottom = document.createElement('div');
+				bottom.className = 'flex items-center justify-between gap-2';
+
+				const stepper = document.createElement('div');
+				stepper.className = 'flex items-center gap-1';
+				const dec = makeBtn('−', 'Remove one ' + item.name,
+					'rounded border px-2 py-0.5 text-sm leading-none hover:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none');
+				const qty = document.createElement('span');
+				qty.className = 'min-w-6 text-center text-sm tabular-nums';
+				qty.setAttribute('aria-label', 'Quantity of ' + item.name);
+				qty.textContent = String(item.qty);
+				const inc = makeBtn('+', 'Add one ' + item.name,
+					'rounded border px-2 py-0.5 text-sm leading-none hover:bg-background focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none');
+				dec.addEventListener('click', () => changeQty(item.id, -1));
+				inc.addEventListener('click', () => changeQty(item.id, 1));
+				stepper.append(dec, qty, inc);
+
+				const lineTotal = document.createElement('span');
+				lineTotal.className = 'text-xs tabular-nums text-muted-foreground';
+				lineTotal.textContent = (priceNum(item.price) * item.qty) + ' db';
+
+				const remove = makeBtn('Remove', 'Remove ' + item.name + ' from loot bag',
+					'rounded border px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 outline-none');
+				remove.addEventListener('click', () => removeLine(item.id));
+
+				bottom.append(stepper, lineTotal, remove);
+				li.append(top, bottom);
 				bootyList.appendChild(li);
 			});
 		}
 
-		// ---- Add to booty ----
+		// ---- Add to bag ----
 		root.querySelectorAll('.pp-add').forEach((btn) => {
 			btn.addEventListener('click', () => {
+				const id = btn.getAttribute('data-id') || (btn.getAttribute('data-name') || 'mystery');
+				const name = btn.getAttribute('data-name') || 'Mystery plunder';
+				const price = btn.getAttribute('data-price') || '? doubloons';
 				const items = load();
-				items.push({
-					name: btn.getAttribute('data-name') || 'Mystery plunder',
-					price: btn.getAttribute('data-price') || '? doubloons',
-				});
+				const existing = items.find((i) => i.id === id);
+				if (existing) {
+					existing.qty = Math.min(MAX_QTY, existing.qty + 1);
+				} else if (items.length < MAX_LINES) {
+					items.push({ id, name, price, qty: 1 });
+				}
 				save(items);
 				renderBooty();
+				hideReceipt();
 				const original = btn.textContent;
-				btn.textContent = 'In yer sack! 🦜';
+				btn.textContent = 'In yer bag! 🦜';
 				btn.disabled = true;
 				setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 900);
 			});
 		});
 
-		// ---- Booty panel toggle ----
-		bootyToggle.addEventListener('click', () => {
-			const open = bootyPanel.hidden;
-			bootyPanel.hidden = !open;
-			bootyToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+		// ---- Loot-bag drawer open/close ----
+		let lastFocus = null;
+		function openBag() {
+			lastFocus = document.activeElement;
+			overlay.hidden = false;
+			bootyPanel.hidden = false;
+			bootyToggle.setAttribute('aria-expanded', 'true');
+			document.body.style.overflow = 'hidden';
+			bootyPanel.focus();
+		}
+		function closeBag() {
+			overlay.hidden = true;
+			bootyPanel.hidden = true;
+			bootyToggle.setAttribute('aria-expanded', 'false');
+			document.body.style.overflow = '';
+			if (lastFocus && typeof lastFocus.focus === 'function') lastFocus.focus();
+			else bootyToggle.focus();
+		}
+		function isOpen() { return !bootyPanel.hidden; }
+
+		bootyToggle.addEventListener('click', () => { isOpen() ? closeBag() : openBag(); });
+		bootyClose.addEventListener('click', closeBag);
+		overlay.addEventListener('click', closeBag);
+		document.addEventListener('keydown', (e) => {
+			if (e.key === 'Escape' && isOpen()) closeBag();
 		});
+
+		// ---- Empty + jest checkout ----
+		function hideReceipt() { receipt.hidden = true; }
 		bootyClear.addEventListener('click', () => {
 			save([]);
 			renderBooty();
+			hideReceipt();
+		});
+		checkoutBtn.addEventListener('click', () => {
+			const items = load();
+			if (items.length === 0) return;
+			const { units, doubloons } = totals(items);
+			receiptLine.textContent =
+				'Ye hauled ' + units + (units === 1 ? ' fine ware' : ' fine wares') +
+				' worth a make-believe ' + doubloons +
+				(doubloons === 1 ? ' doubloon' : ' doubloons') +
+				' — and paid not a single one.';
+			receipt.hidden = false;
+			receipt.scrollIntoView({ block: 'nearest' });
+			receiptDismiss.focus();
+		});
+		receiptDismiss.addEventListener('click', () => {
+			hideReceipt();
+			bootyToggle.focus();
 		});
 
 		// ---- Category filter ----
@@ -390,6 +605,11 @@ const products = [
 		applyFilter('all');
 		renderBooty();
 
-		document.addEventListener('astro:before-swap', () => { root.dataset.bound = ''; }, { once: true });
+		// Astro client-router: drop the lock + body style and let the swapped-in
+		// DOM re-bind its own fresh listeners on next render.
+		document.addEventListener('astro:before-swap', () => {
+			document.body.style.overflow = '';
+			root.dataset.bound = '';
+		}, { once: true });
 	})();
 </script>
