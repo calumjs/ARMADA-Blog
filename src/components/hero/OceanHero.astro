@@ -1,0 +1,383 @@
+---
+// OceanHero — a fixed-position, parallax WebGL backdrop: a stylised sailing ship
+// riding a procedural FBM ocean under a soft maritime sky. Rendered behind the
+// scrolling page content so the page rolls over it (rolling-window depth).
+//
+// Original work — the ocean (FBM/value-noise waves), sky gradient, sun glint and
+// the ship are all hand-written here. Inspired by dr2's "Sailing" on Shadertoy,
+// but no CC-licensed code is copied or vendored; this stays under the repo license.
+//
+// Fallbacks & guards (see the inline script):
+//   - prefers-reduced-motion  -> no animation; renders a single still frame
+//   - WebGL unavailable        -> canvas hidden, CSS gradient fallback shown
+//   - perf guard               -> DPR capped; pauses when offscreen; downgrades
+//                                 resolution / pauses if FPS drops below ~30
+---
+
+<div id="ocean-hero" aria-hidden="true" class="ocean-hero pointer-events-none">
+	{/* Static CSS fallback: a maritime gradient that is always painted first, so
+	    there is never a black/broken canvas even before (or without) WebGL. */}
+	<div class="ocean-hero__fallback"></div>
+	<canvas id="ocean-hero-canvas" class="ocean-hero__canvas"></canvas>
+</div>
+
+<style>
+	.ocean-hero {
+		position: fixed;
+		inset: 0;
+		z-index: -1; /* sit behind all page content */
+		overflow: hidden;
+	}
+	.ocean-hero__fallback {
+		position: absolute;
+		inset: 0;
+		/* Sky-to-sea wash in the maritime palette; visible if WebGL is absent. */
+		background:
+			radial-gradient(120% 80% at 50% 8%, oklch(0.86 0.06 230 / 0.9), transparent 60%),
+			linear-gradient(
+				to bottom,
+				oklch(0.9 0.04 235) 0%,
+				oklch(0.82 0.06 225) 42%,
+				oklch(0.6 0.09 220) 56%,
+				oklch(0.42 0.08 220) 100%
+			);
+		opacity: 0.55;
+	}
+	:global(.dark) .ocean-hero__fallback {
+		background:
+			radial-gradient(120% 80% at 50% 8%, oklch(0.4 0.06 250 / 0.9), transparent 60%),
+			linear-gradient(
+				to bottom,
+				oklch(0.32 0.05 255) 0%,
+				oklch(0.26 0.05 250) 45%,
+				oklch(0.2 0.05 245) 58%,
+				oklch(0.14 0.04 245) 100%
+			);
+		opacity: 0.7;
+	}
+	.ocean-hero__canvas {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		display: block;
+		opacity: 0;
+		transition: opacity 600ms ease;
+	}
+	/* Revealed by the script once the first frame has drawn, so we never flash a
+	   black canvas before the GL context paints. */
+	.ocean-hero.is-ready .ocean-hero__canvas {
+		opacity: 0.55;
+	}
+	:global(.dark) .ocean-hero.is-ready .ocean-hero__canvas {
+		opacity: 0.7;
+	}
+</style>
+
+<script is:inline>
+	(() => {
+		const root = document.getElementById('ocean-hero');
+		const canvas = document.getElementById('ocean-hero-canvas');
+		if (!root || !canvas) return;
+
+		const reduceMotion =
+			window.matchMedia &&
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+		// --- Acquire a WebGL context; bail to the CSS fallback if unavailable. ---
+		let gl = null;
+		try {
+			gl =
+				canvas.getContext('webgl', { antialias: false, alpha: true, premultipliedAlpha: false }) ||
+				canvas.getContext('experimental-webgl', { antialias: false, alpha: true });
+		} catch (_) {
+			gl = null;
+		}
+		if (!gl) {
+			// Leave the canvas hidden; the CSS gradient fallback remains visible.
+			return;
+		}
+
+		// --- Shaders -----------------------------------------------------------
+		const vertSrc = `
+			attribute vec2 aPos;
+			void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
+		`;
+
+		// Original procedural sea + stylised ship. FBM value-noise drives the
+		// swell; a simple SDF-ish hull + two sails sit on the horizon.
+		const fragSrc = `
+			precision mediump float;
+			uniform vec2  uRes;
+			uniform float uTime;
+
+			// --- hash / value noise / fbm (original, classic ingredients) ------
+			float hash(vec2 p) {
+				p = fract(p * vec2(123.34, 456.21));
+				p += dot(p, p + 45.32);
+				return fract(p.x * p.y);
+			}
+			float noise(vec2 p) {
+				vec2 i = floor(p);
+				vec2 f = fract(p);
+				vec2 u = f * f * (3.0 - 2.0 * f);
+				float a = hash(i);
+				float b = hash(i + vec2(1.0, 0.0));
+				float c = hash(i + vec2(0.0, 1.0));
+				float d = hash(i + vec2(1.0, 1.0));
+				return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+			}
+			float fbm(vec2 p) {
+				float v = 0.0;
+				float amp = 0.5;
+				mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+				for (int i = 0; i < 5; i++) {
+					v += amp * noise(p);
+					p = rot * p * 2.02;
+					amp *= 0.5;
+				}
+				return v;
+			}
+
+			void main() {
+				vec2 uv = gl_FragCoord.xy / uRes.xy;     // 0..1, y up
+				float aspect = uRes.x / uRes.y;
+				float horizon = 0.56;                    // sea/sky split
+
+				// ---- Sky -------------------------------------------------------
+				vec3 skyTop = vec3(0.43, 0.62, 0.80);
+				vec3 skyLow = vec3(0.78, 0.84, 0.86);
+				vec3 sky = mix(skyLow, skyTop, smoothstep(horizon, 1.0, uv.y));
+				// Soft sun glow upper-centre-right.
+				vec2 sun = vec2(0.62, 0.86);
+				float sunD = distance(vec2(uv.x * aspect, uv.y), vec2(sun.x * aspect, sun.y));
+				sky += vec3(1.0, 0.93, 0.78) * smoothstep(0.5, 0.0, sunD) * 0.5;
+
+				// ---- Sea -------------------------------------------------------
+				// Project screen space into a faux-perspective sea plane: rows
+				// near the horizon compress, foreground stretches.
+				float depth = (horizon - uv.y) / horizon;        // 0 at horizon..1 near
+				depth = clamp(depth, 0.0, 1.0);
+				float persp = 1.0 / (depth + 0.06);
+				vec2 sea;
+				sea.x = (uv.x - 0.5) * aspect * persp * 1.4;
+				sea.y = persp * 1.2 + uTime * 0.18;
+
+				float swell = fbm(sea * 2.0 + vec2(0.0, uTime * 0.05));
+				swell += 0.5 * fbm(sea * 5.0 - vec2(uTime * 0.07, 0.0));
+				swell *= mix(0.25, 1.0, depth);                  // calmer toward horizon
+
+				vec3 seaDeep = vec3(0.06, 0.20, 0.32);
+				vec3 seaLite = vec3(0.30, 0.55, 0.62);
+				vec3 water = mix(seaDeep, seaLite, swell);
+
+				// Sun glint streak on the water.
+				float glint = smoothstep(0.45, 0.0, abs(uv.x - 0.6)) *
+				              smoothstep(0.0, 0.18, depth) *
+				              (0.5 + 0.5 * sin(swell * 24.0 + uTime));
+				water += vec3(1.0, 0.95, 0.8) * glint * 0.18;
+
+				// Crest highlights.
+				water += vec3(0.9) * smoothstep(0.7, 0.95, swell) * 0.25;
+
+				vec3 col = uv.y > horizon ? sky : water;
+
+				// ---- Ship (stylised silhouette on the horizon) -----------------
+				// Centre it slightly left, bobbing gently with the swell.
+				float bob = sin(uTime * 0.8) * 0.006;
+				vec2 sp = vec2((uv.x - 0.40) * aspect, uv.y - (horizon + 0.012 + bob));
+				float ship = 0.0;
+
+				// Hull: a shallow arc (wider at the waterline, tapering up).
+				float hullW = 0.085;
+				float hullH = 0.028;
+				float hullArc = sp.y + 0.5 * (sp.x / hullW) * (sp.x / hullW) * hullH;
+				if (abs(sp.x) < hullW && hullArc > -hullH && hullArc < 0.0) ship = 1.0;
+
+				// Two masts.
+				if (abs(sp.x + 0.018) < 0.0035 && sp.y > 0.0 && sp.y < 0.16) ship = 1.0;
+				if (abs(sp.x - 0.030) < 0.0035 && sp.y > 0.0 && sp.y < 0.13) ship = 1.0;
+
+				// Sails: triangles billowing off each mast.
+				float s1 = step(0.0, sp.y) * step(sp.y, 0.15) *
+				           step(-0.02, sp.x + 0.014) *
+				           step(sp.x + 0.014, 0.05 * (1.0 - sp.y / 0.15));
+				float s2 = step(0.0, sp.y) * step(sp.y, 0.12) *
+				           step(-0.018, sp.x - 0.034) *
+				           step(sp.x - 0.034, 0.045 * (1.0 - sp.y / 0.12));
+				float sails = max(s1, s2);
+
+				vec3 hullCol = vec3(0.13, 0.09, 0.07);
+				vec3 sailCol = vec3(0.96, 0.93, 0.84);
+				col = mix(col, hullCol, ship);
+				col = mix(col, sailCol, sails * 0.92);
+
+				// Subtle wake glow beneath the hull.
+				float wake = smoothstep(0.05, 0.0, length(vec2(sp.x, (sp.y + 0.02) * 2.5))) *
+				             step(sp.y, -0.005);
+				col += vec3(0.8, 0.9, 1.0) * wake * 0.12;
+
+				// Vignette for focus.
+				float vig = smoothstep(1.25, 0.35, distance(uv, vec2(0.5)));
+				col *= mix(0.82, 1.0, vig);
+
+				gl_FragColor = vec4(col, 1.0);
+			}
+		`;
+
+		function compile(type, src) {
+			const sh = gl.createShader(type);
+			gl.shaderSource(sh, src);
+			gl.compileShader(sh);
+			if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+				gl.deleteShader(sh);
+				return null;
+			}
+			return sh;
+		}
+
+		const vs = compile(gl.VERTEX_SHADER, vertSrc);
+		const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+		if (!vs || !fs) return; // compile failure -> CSS fallback stays
+
+		const prog = gl.createProgram();
+		gl.attachShader(prog, vs);
+		gl.attachShader(prog, fs);
+		gl.linkProgram(prog);
+		if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return;
+		gl.useProgram(prog);
+
+		// Fullscreen triangle.
+		const buf = gl.createBuffer();
+		gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+		gl.bufferData(
+			gl.ARRAY_BUFFER,
+			new Float32Array([-1, -1, 3, -1, -1, 3]),
+			gl.STATIC_DRAW
+		);
+		const aPos = gl.getAttribLocation(prog, 'aPos');
+		gl.enableVertexAttribArray(aPos);
+		gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+		const uRes = gl.getUniformLocation(prog, 'uRes');
+		const uTime = gl.getUniformLocation(prog, 'uTime');
+
+		// --- Perf guard state --------------------------------------------------
+		// Cap devicePixelRatio so high-DPI screens don't shade 4x the pixels.
+		let dprCap = 1.5;
+		let quality = 1.0; // resolution scale; downgraded if FPS sags
+
+		function resize() {
+			const w = root.clientWidth || window.innerWidth;
+			const h = root.clientHeight || window.innerHeight;
+			const dpr = Math.min(window.devicePixelRatio || 1, dprCap) * quality;
+			const cw = Math.max(1, Math.floor(w * dpr));
+			const ch = Math.max(1, Math.floor(h * dpr));
+			if (canvas.width !== cw || canvas.height !== ch) {
+				canvas.width = cw;
+				canvas.height = ch;
+			}
+			gl.viewport(0, 0, canvas.width, canvas.height);
+			gl.uniform2f(uRes, canvas.width, canvas.height);
+		}
+
+		let ready = false;
+		function drawFrame(tSeconds) {
+			resize();
+			gl.uniform1f(uTime, tSeconds);
+			gl.drawArrays(gl.TRIANGLES, 0, 3);
+			if (!ready) {
+				ready = true;
+				root.classList.add('is-ready');
+			}
+		}
+
+		// --- Reduced motion: a single still frame, no RAF loop. ----------------
+		if (reduceMotion) {
+			drawFrame(8.0); // a pleasant fixed moment
+			window.addEventListener('resize', () => drawFrame(8.0), { passive: true });
+			return;
+		}
+
+		// --- Animated path with FPS / visibility guards ------------------------
+		let running = true;     // hero on-screen
+		let rafId = 0;
+		let startTs = 0;
+		let lastTs = 0;
+		let frames = 0;
+		let fpsAccum = 0;
+		let downgraded = false;
+
+		function loop(ts) {
+			if (!running) return;
+			if (!startTs) startTs = ts;
+			const elapsed = (ts - startTs) / 1000;
+
+			drawFrame(elapsed);
+
+			// FPS sampling over ~1s windows.
+			if (lastTs) {
+				const dt = ts - lastTs;
+				fpsAccum += dt;
+				frames++;
+				if (fpsAccum >= 1000) {
+					const fps = (frames * 1000) / fpsAccum;
+					if (fps < 30) {
+						if (!downgraded) {
+							// First strike: drop resolution to lighten the load.
+							downgraded = true;
+							quality = 0.6;
+							dprCap = 1.0;
+						} else {
+							// Still struggling: stop animating, keep last frame.
+							running = false;
+							cancelAnimationFrame(rafId);
+							return;
+						}
+					}
+					frames = 0;
+					fpsAccum = 0;
+				}
+			}
+			lastTs = ts;
+			rafId = requestAnimationFrame(loop);
+		}
+
+		function startLoop() {
+			if (running && !rafId) {
+				lastTs = 0;
+				startTs = 0;
+				rafId = requestAnimationFrame(loop);
+			}
+		}
+		function stopLoop() {
+			cancelAnimationFrame(rafId);
+			rafId = 0;
+		}
+
+		// Pause when the hero scrolls fully out of view (saves battery/CPU).
+		if ('IntersectionObserver' in window) {
+			const io = new IntersectionObserver(
+				(entries) => {
+					const visible = entries[0] && entries[0].isIntersecting;
+					if (visible && running) startLoop();
+					else stopLoop();
+				},
+				{ threshold: 0 }
+			);
+			io.observe(root);
+		}
+
+		// Pause on tab hide.
+		document.addEventListener('visibilitychange', () => {
+			if (document.hidden) stopLoop();
+			else if (running) startLoop();
+		});
+
+		window.addEventListener('resize', resize, { passive: true });
+
+		// Kick off.
+		running = true;
+		rafId = requestAnimationFrame(loop);
+	})();
+</script>
