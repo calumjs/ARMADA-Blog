@@ -2,15 +2,18 @@
 import { Icon } from 'astro-icon/components';
 
 // Header "language" selector — pure client-side whimsy modelled on
-// ThemeToggle.astro. Two options: plain English (default) and English (Pirate),
-// the latter rewriting visible body text into family-friendly pirate-speak via
-// a small client-side dictionary. The swap is strictly reversible: originals are
-// cached and only text nodes are touched (skipping code/pre/inputs and any
-// [data-no-piratify] subtree). Persistence + route-survival mirror ThemeToggle.
-// Designed to extend later to more "languages" without rework.
+// ThemeToggle.astro. Three options: plain English (default), English (Pirate),
+// and Emoji. Pirate rewrites visible body text into family-friendly
+// pirate-speak; Emoji augments common words with a tasteful emoji. Both run
+// through one reversible engine: originals are cached and only text nodes are
+// touched (skipping code/pre/inputs and any [data-no-piratify] subtree), and
+// every mode transforms from the cached original so switching between them never
+// compounds. Persistence + route-survival mirror ThemeToggle. Designed to
+// extend further to more "languages" without rework.
 const languages = [
 	{ id: 'en', label: 'English', icon: 'tabler:flag' },
 	{ id: 'pirate', label: 'English (Pirate)', icon: 'tabler:skull' },
+	{ id: 'emoji', label: 'Emoji', icon: 'tabler:mood-smile' },
 ];
 
 // SSR/no-JS fallback: the active marker is reconciled by the inline script, so
@@ -56,7 +59,7 @@ const ssrDefaultLang = 'en';
 	if (!window.__langToggleBound) {
 		window.__langToggleBound = true;
 
-		var LANGS = { en: true, pirate: true };
+		var LANGS = { en: true, pirate: true, emoji: true };
 
 		// --- Pirate dictionary -------------------------------------------------
 		// Family-friendly, whole-word replacements. Each entry preserves the
@@ -104,6 +107,43 @@ const ssrDefaultLang = 'en';
 			});
 		}
 
+		// --- Emoji dictionary --------------------------------------------------
+		// Curated, family-friendly word -> emoji map. Emoji mode *augments*: it
+		// keeps the original word and appends the emoji (e.g. "ship" -> "ship ⛵"),
+		// so the copy stays readable and only a tasteful subset of words is
+		// decorated. Built from the originals store like pirate mode, so it never
+		// compounds and restores byte-exact.
+		var EMOJI = {
+			sea: '🌊', seas: '🌊', ocean: '🌊', wave: '🌊', waves: '🌊',
+			ship: '⛵', ships: '⛵', boat: '⛵', boats: '⛵', sail: '⛵', sailing: '⛵',
+			treasure: '💰', gold: '💰', money: '💰', riches: '💰',
+			fleet: '⚓', anchor: '⚓', harbour: '⚓', harbor: '⚓', port: '⚓',
+			code: '💻', coding: '💻', software: '💻', computer: '💻',
+			bug: '🐛', bugs: '🐛', defect: '🐛',
+			map: '🗺️', maps: '🗺️', chart: '🗺️', charts: '🗺️',
+			pirate: '🏴‍☠️', pirates: '🏴‍☠️', captain: '🧑‍✈️',
+			star: '⭐', stars: '⭐', sun: '☀️', moon: '🌙',
+			fire: '🔥', rocket: '🚀', heart: '❤️', love: '❤️',
+			music: '🎵', book: '📚', books: '📚', read: '📚', reading: '📚',
+			coffee: '☕', tea: '🍵', food: '🍽️',
+			time: '⏰', clock: '⏰', idea: '💡', ideas: '💡',
+			win: '🏆', winner: '🏆', victory: '🏆', game: '🎮', games: '🎮',
+			fish: '🐟', whale: '🐋', shark: '🦈', crab: '🦀', octopus: '🐙',
+			compass: '🧭', wind: '💨', storm: '⛈️', rain: '🌧️',
+			home: '🏠', world: '🌍', earth: '🌍', email: '📧', message: '💬',
+			key: '🔑', lock: '🔒', search: '🔍', warning: '⚠️', check: '✅',
+		};
+
+		var emojiKeys = Object.keys(EMOJI).sort(function (a, b) { return b.length - a.length; });
+		var EMOJI_RE = new RegExp("(?<![A-Za-z’'])(" + emojiKeys.map(esc).join('|') + ")(?![A-Za-z’'])", 'gi');
+
+		function emojify(text) {
+			return text.replace(EMOJI_RE, function (word) {
+				var em = EMOJI[word.toLowerCase()];
+				return em ? word + ' ' + em : word;
+			});
+		}
+
 		// --- Text-node walking -------------------------------------------------
 		var SKIP_TAGS = { CODE: 1, PRE: 1, INPUT: 1, TEXTAREA: 1, SCRIPT: 1, STYLE: 1, KBD: 1, SAMP: 1 };
 
@@ -136,11 +176,14 @@ const ssrDefaultLang = 'en';
 			while ((n = walker.nextNode())) fn(n);
 		}
 
-		function applyPirate() {
+		// Apply any text transform from the *cached original* of each node, so
+		// every mode (pirate / emoji) is computed from English and switching
+		// between them never compounds.
+		function applyTransform(transform) {
 			eachTextNode(function (node) {
 				var base = originals.has(node) ? originals.get(node) : node.nodeValue;
 				if (!originals.has(node)) originals.set(node, base);
-				var swapped = piratify(base);
+				var swapped = transform(base);
 				if (swapped !== node.nodeValue) node.nodeValue = swapped;
 			});
 		}
@@ -166,7 +209,8 @@ const ssrDefaultLang = 'en';
 			if (!LANGS[id]) id = 'en';
 			if (persist) { try { localStorage.setItem('language', id); } catch (e) {} }
 			document.documentElement.setAttribute('data-lang', id);
-			if (id === 'pirate') applyPirate();
+			if (id === 'pirate') applyTransform(piratify);
+			else if (id === 'emoji') applyTransform(emojify);
 			else restoreEnglish();
 			syncChecks();
 		}
