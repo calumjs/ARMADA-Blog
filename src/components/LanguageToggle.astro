@@ -2,8 +2,9 @@
 import { Icon } from 'astro-icon/components';
 
 // Header "language" selector — pure client-side whimsy modelled on
-// ThemeToggle.astro. Three options: plain English (default), English (Pirate),
-// and Emoji. Pirate rewrites visible body text into family-friendly
+// ThemeToggle.astro. Options: plain English (default), English (Pirate),
+// Emoji, English (Spoonerism), and 🧠 Brainrot (a rule-based gen-z-pirate
+// restyle — NOT real AI). Pirate rewrites visible body text into family-friendly
 // pirate-speak; Emoji augments common words with a tasteful emoji. Both run
 // through one reversible engine: originals are cached and only text nodes are
 // touched (skipping code/pre/inputs and any [data-no-piratify] subtree), and
@@ -15,6 +16,7 @@ const languages = [
 	{ id: 'pirate', label: 'English (Pirate)', icon: 'tabler:skull' },
 	{ id: 'emoji', label: 'Emoji', icon: 'tabler:mood-smile' },
 	{ id: 'spoonerism', label: 'English (Spoonerism)', icon: 'tabler:arrows-shuffle' },
+	{ id: 'brainrot', label: '🧠 Brainrot', icon: 'tabler:brain' },
 ];
 
 // SSR/no-JS fallback: the active marker is reconciled by the inline script, so
@@ -60,7 +62,7 @@ const ssrDefaultLang = 'en';
 	if (!window.__langToggleBound) {
 		window.__langToggleBound = true;
 
-		var LANGS = { en: true, pirate: true, emoji: true, spoonerism: true };
+		var LANGS = { en: true, pirate: true, emoji: true, spoonerism: true, brainrot: true };
 
 		// --- Pirate dictionary -------------------------------------------------
 		// Family-friendly, whole-word replacements. Each entry preserves the
@@ -222,6 +224,58 @@ const ssrDefaultLang = 'en';
 			return tokens.join('');
 		}
 
+		// --- Brainrot transform -----------------------------------------------
+		// Opt-in, reversible "brainrot mode": restyles visible body text into a
+		// gen-z-pirate register via RULE-BASED whole-word swaps (NO AI / network /
+		// LLM). Runs through the same engine as the other modes — computed from the
+		// cached original via applyTransform — so it is fully reversible
+		// (byte-exact restore) and never compounds. Two passes: (1) a curated
+		// word/phrase dictionary, then (2) a light "lowkey" intensifier prepended
+		// to a few long words, applied sparingly so the copy stays readable-funny.
+		var BRAINROT = {
+			treasure: 'the bag', money: 'the bag', riches: 'the bag', gold: 'the bag',
+			hello: 'ayo', hi: 'ayo', hey: 'ayo',
+			friend: 'bestie', friends: 'besties',
+			yes: 'fr', no: 'nah', 'okay': 'bet', ok: 'bet',
+			good: 'fire', great: 'goated', amazing: 'goated', best: 'goated',
+			cool: 'based', awesome: 'based', impressive: 'bussin',
+			very: 'lowkey', really: 'lowkey', extremely: 'highkey',
+			happy: 'vibing', excited: 'hyped', sad: 'down bad',
+			captain: 'the GOAT', boss: 'the GOAT', leader: 'the GOAT',
+			ship: 'whip', boat: 'whip', vessel: 'whip',
+			sea: 'the deep', ocean: 'the deep',
+			pirate: 'menace', pirates: 'menaces',
+			enemy: 'opp', enemies: 'opps', rival: 'opp',
+			problem: 'L', problems: 'Ls', failure: 'L', loss: 'L',
+			win: 'W', victory: 'W', success: 'W',
+			truth: 'no cap', honestly: 'no cap', seriously: 'deadass',
+			look: 'peep', understand: 'get it', think: 'lowkey reckon',
+			beautiful: 'gorgeous fr', strong: 'built different',
+			cap: 'cap', drama: 'the tea', gossip: 'the tea', news: 'the tea',
+		};
+
+		var brKeys = Object.keys(BRAINROT).sort(function (a, b) { return b.length - a.length; });
+		var BR_RE = new RegExp("(?<![A-Za-z’'])(" + brKeys.map(esc).join('|') + ")(?![A-Za-z’'])", 'gi');
+
+		function brainrotify(text) {
+			// Pass 1: curated whole-word/phrase swaps, preserving case shape.
+			var out = text.replace(BR_RE, function (word) {
+				var rep = BRAINROT[word.toLowerCase()];
+				return rep ? matchCase(word, rep) : word;
+			});
+			// Pass 2: prepend "lowkey" to a few long (8+ letter) plain words that
+			// weren't already swapped, so the register reads gen-z without
+			// drowning the copy. Deterministic (every Nth eligible word) so the
+			// same input always maps to the same output — keeping it reversible.
+			var hit = 0;
+			out = out.replace(/(?<![A-Za-z’'])([A-Za-z]{8,})(?![A-Za-z’'])/g, function (w) {
+				if (/lowkey|highkey/i.test(w)) return w;
+				hit++;
+				return (hit % 3 === 0) ? 'lowkey ' + w : w;
+			});
+			return out;
+		}
+
 		// --- Text-node walking -------------------------------------------------
 		var SKIP_TAGS = { CODE: 1, PRE: 1, INPUT: 1, TEXTAREA: 1, SCRIPT: 1, STYLE: 1, KBD: 1, SAMP: 1 };
 
@@ -290,6 +344,7 @@ const ssrDefaultLang = 'en';
 			if (id === 'pirate') applyTransform(piratify);
 			else if (id === 'emoji') applyTransform(emojify);
 			else if (id === 'spoonerism') applyTransform(spoonerise);
+			else if (id === 'brainrot') applyTransform(brainrotify);
 			else restoreEnglish();
 			syncChecks();
 		}
