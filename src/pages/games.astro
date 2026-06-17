@@ -10,6 +10,7 @@ import MemoryMatch from '../components/games/MemoryMatch.astro';
 import Breakout from '../components/games/Breakout.astro';
 import TicTacToe from '../components/games/TicTacToe.astro';
 import SinkTheFleet from '../components/games/SinkTheFleet.astro';
+import WhackAKraken from '../components/games/WhackAKraken.astro';
 
 const config = (await getConfig()).data?.config ?? null;
 
@@ -23,6 +24,7 @@ const games = [
 	{ id: 'breakout', name: 'Breakout' },
 	{ id: 'tictactoe', name: 'Tic-Tac-Toe' },
 	{ id: 'sinkthefleet', name: 'Sink the Fleet' },
+	{ id: 'whackakraken', name: 'Whack-a-Kraken' },
 ];
 ---
 
@@ -58,6 +60,7 @@ const games = [
 			<Breakout />
 			<TicTacToe />
 			<SinkTheFleet />
+			<WhackAKraken />
 		</div>
 	</main>
 </Base>

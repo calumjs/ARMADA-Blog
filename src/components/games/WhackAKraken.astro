@@ -1,0 +1,254 @@
+---
+import GameShell from './GameShell.astro';
+---
+
+<GameShell
+	id="whackakraken"
+	title="Whack-a-Kraken"
+	instructions="Kraken tentacles surface from the portholes — tap or click one before it slips back under. Score as many strikes as you can before the timer runs out; the deep gets faster the longer you survive. Use number keys 1–9 (grid order) to strike with the keyboard."
+>
+	<div class="flex w-full max-w-md flex-col gap-4">
+		<div class="flex items-center justify-between gap-4 text-sm font-medium">
+			<span>Score: <span id="wak-score" class="tabular-nums font-bold">0</span></span>
+			<span>Best: <span id="wak-best" class="tabular-nums font-bold">0</span></span>
+			<span>Time: <span id="wak-time" class="tabular-nums font-bold">30</span>s</span>
+		</div>
+
+		<div
+			id="wak-grid"
+			class="relative grid touch-none grid-cols-3 gap-2 rounded-xl border bg-background p-2 select-none"
+			role="grid"
+			aria-label="Whack-a-Kraken — strike the tentacles"
+		></div>
+
+		<div class="flex items-center justify-center gap-3">
+			<button
+				id="wak-btn"
+				class="rounded-md border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+			>Start</button>
+		</div>
+
+		<p id="wak-status" class="text-center text-sm text-muted-foreground" role="status">
+			Press Start to release the kraken.
+		</p>
+	</div>
+</GameShell>
+
+<style>
+	/* Each cell is a porthole; the tentacle hides below the waterline and rises
+	   when active. prefers-reduced-motion swaps the transition for an instant
+	   show/hide so nothing slides or pulses. */
+	.wak-cell {
+		position: relative;
+		aspect-ratio: 1 / 1;
+		overflow: hidden;
+		border-radius: 9999px;
+		border: 2px solid oklch(0.55 0.06 235 / 0.6);
+		background:
+			radial-gradient(circle at 50% 30%, oklch(0.42 0.07 240), oklch(0.22 0.05 250));
+		cursor: pointer;
+	}
+	.wak-cell:focus-visible {
+		outline: 2px solid oklch(0.78 0.18 78);
+		outline-offset: 2px;
+	}
+	.wak-tentacle {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		color: oklch(0.55 0.16 18);
+		transform: translateY(105%);
+		transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1);
+		will-change: transform;
+	}
+	.wak-cell.is-up .wak-tentacle {
+		transform: translateY(0%);
+	}
+	.wak-cell.is-hit {
+		animation: wak-flash 220ms ease-out;
+	}
+	.wak-tentacle svg {
+		width: 78%;
+		height: 90%;
+	}
+	@keyframes wak-flash {
+		0% { background:
+			radial-gradient(circle at 50% 30%, oklch(0.85 0.16 80), oklch(0.5 0.12 60)); }
+		100% { background:
+			radial-gradient(circle at 50% 30%, oklch(0.42 0.07 240), oklch(0.22 0.05 250)); }
+	}
+	/* Calm, accessible mode: no sliding, no flash — just appear/disappear. */
+	@media (prefers-reduced-motion: reduce) {
+		.wak-tentacle {
+			transition: none;
+			transform: translateY(0%);
+			opacity: 0;
+		}
+		.wak-cell.is-up .wak-tentacle { opacity: 1; }
+		.wak-cell.is-hit { animation: none; }
+	}
+</style>
+
+<script is:inline>
+	(() => {
+		const grid = document.getElementById('wak-grid');
+		if (!grid) return;
+		const scoreEl = document.getElementById('wak-score');
+		const bestEl = document.getElementById('wak-best');
+		const timeEl = document.getElementById('wak-time');
+		const btn = document.getElementById('wak-btn');
+		const statusEl = document.getElementById('wak-status');
+
+		const COLS = 3, ROWS = 3, CELLS = COLS * ROWS;
+		const GAME_SECONDS = 30;
+		const BEST_KEY = 'wak-best';
+
+		// Maritime tentacle art reused from the kraken easter-egg style.
+		const TENTACLE_SVG =
+			'<svg viewBox="0 0 200 200" aria-hidden="true" focusable="false">' +
+			'<path fill="currentColor" d="M70 200 C 55 130 95 110 80 60 C 72 30 50 30 45 0 C 70 30 95 45 100 95 C 105 150 92 175 100 200 Z" />' +
+			'<path fill="currentColor" d="M130 200 C 145 130 105 110 120 60 C 128 30 150 30 155 0 C 130 30 105 45 100 95 C 95 150 108 175 100 200 Z" />' +
+			'<circle cx="82" cy="78" r="9" fill="oklch(0.95 0.16 95)" />' +
+			'<circle cx="118" cy="78" r="9" fill="oklch(0.95 0.16 95)" />' +
+			'<circle cx="82" cy="80" r="4" fill="oklch(0.18 0.04 252)" />' +
+			'<circle cx="118" cy="80" r="4" fill="oklch(0.18 0.04 252)" />' +
+			'</svg>';
+
+		const reduceMotion = window.matchMedia
+			? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+			: false;
+
+		let cells = [];
+		let active = -1;       // index of the currently-surfaced tentacle, or -1
+		let score = 0;
+		let timeLeft = GAME_SECONDS;
+		let running = false;
+		let spawnTimer = null;
+		let hideTimer = null;
+		let countdownTimer = null;
+		let best = 0;
+
+		try { best = parseInt(localStorage.getItem(BEST_KEY) || '0', 10) || 0; } catch (e) {}
+		bestEl.textContent = String(best);
+
+		function buildGrid() {
+			grid.innerHTML = '';
+			cells = [];
+			for (let i = 0; i < CELLS; i++) {
+				const cell = document.createElement('button');
+				cell.type = 'button';
+				cell.className = 'wak-cell';
+				cell.setAttribute('aria-label', `Porthole ${i + 1}`);
+				cell.innerHTML = '<span class="wak-tentacle">' + TENTACLE_SVG + '</span>';
+				cell.addEventListener('pointerdown', (e) => { e.preventDefault(); strike(i); });
+				grid.appendChild(cell);
+				cells.push(cell);
+			}
+		}
+
+		// Difficulty ramps with elapsed time: spawn window shrinks from ~1000ms
+		// down toward ~420ms as the clock runs down.
+		function currentWindow() {
+			const elapsed = GAME_SECONDS - timeLeft;
+			const t = Math.min(1, elapsed / GAME_SECONDS);
+			return Math.round(1000 - t * 580); // 1000ms → 420ms
+		}
+
+		function clearActive() {
+			if (active >= 0) {
+				cells[active].classList.remove('is-up');
+				active = -1;
+			}
+		}
+
+		function spawn() {
+			if (!running) return;
+			clearActive();
+			// Choose a random cell (any cell is fine since the previous one is down).
+			const idx = Math.floor(Math.random() * CELLS);
+			active = idx;
+			cells[idx].classList.add('is-up');
+			const win = currentWindow();
+			hideTimer = setTimeout(() => {
+				clearActive();
+				// Short gap before the next surfacing keeps it readable.
+				spawnTimer = setTimeout(spawn, reduceMotion ? 260 : 160);
+			}, win);
+		}
+
+		function strike(i) {
+			if (!running) return;
+			if (i !== active) return; // missed / empty porthole — no penalty, no points
+			cells[i].classList.remove('is-up');
+			cells[i].classList.add('is-hit');
+			setTimeout(() => cells[i] && cells[i].classList.remove('is-hit'), 240);
+			active = -1;
+			score++;
+			scoreEl.textContent = String(score);
+			clearTimeout(hideTimer);
+			// Immediately surface the next one for a snappy combo feel.
+			spawnTimer = setTimeout(spawn, reduceMotion ? 220 : 120);
+		}
+
+		function tick() {
+			timeLeft--;
+			timeEl.textContent = String(Math.max(0, timeLeft));
+			if (timeLeft <= 0) finish();
+		}
+
+		function start() {
+			stopTimers();
+			score = 0;
+			timeLeft = GAME_SECONDS;
+			running = true;
+			scoreEl.textContent = '0';
+			timeEl.textContent = String(GAME_SECONDS);
+			statusEl.textContent = 'Strike! The kraken surfaces…';
+			btn.textContent = 'Restart';
+			buildGrid();
+			countdownTimer = setInterval(tick, 1000);
+			spawn();
+		}
+
+		function finish() {
+			running = false;
+			stopTimers();
+			clearActive();
+			if (score > best) {
+				best = score;
+				bestEl.textContent = String(best);
+				try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
+				statusEl.textContent = `Game over — new best of ${score}! Press Restart to dive again.`;
+			} else {
+				statusEl.textContent = `Game over — you struck ${score}. Press Restart to dive again.`;
+			}
+			btn.textContent = 'Restart';
+		}
+
+		function stopTimers() {
+			clearTimeout(spawnTimer);
+			clearTimeout(hideTimer);
+			clearInterval(countdownTimer);
+			spawnTimer = hideTimer = countdownTimer = null;
+		}
+
+		btn.addEventListener('click', start);
+
+		// Keyboard play: number keys 1–9 strike the matching porthole.
+		document.addEventListener('keydown', (e) => {
+			if (!running) return;
+			const n = parseInt(e.key, 10);
+			if (!Number.isNaN(n) && n >= 1 && n <= CELLS) {
+				e.preventDefault();
+				strike(n - 1);
+			}
+		});
+
+		// Clean up on Astro route swaps so timers don't leak across pages.
+		document.addEventListener('astro:before-swap', () => { running = false; stopTimers(); }, { once: true });
+
+		buildGrid();
+	})();
+</script>
