@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Shiver Me Timbers — 3D Naval Combat</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E☠%3C/text%3E%3C/svg%3E" />
+    <style>
+      :root {
+        --parchment: #f1e2bf;
+        --parchment-dim: #d8c294;
+        --wood: #2a1c11;
+        --wood-deep: #160d06;
+        --gold: #e0ad4d;
+        --gold-bright: #f6cf6e;
+        --blood: #9b2e22;
+        --sea: #3aa0c4;
+        --ink: #2a1c11;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1822; }
+      body {
+        font-family: "Trebuchet MS", system-ui, sans-serif;
+        color: var(--parchment);
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: default;
+      }
+      #game { position: fixed; inset: 0; }
+      #game canvas { display: block; }
+
+      /* ---------- HUD overlay ---------- */
+      #hud {
+        position: fixed; inset: 0; pointer-events: none;
+        opacity: 0; transition: opacity 0.8s ease;
+        font-variant-numeric: tabular-nums;
+      }
+      #hud.live { opacity: 1; }
+
+      .panel {
+        background: linear-gradient(160deg, rgba(34, 22, 13, 0.82), rgba(14, 9, 5, 0.82));
+        border: 1px solid rgba(224, 173, 77, 0.55);
+        border-radius: 10px;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45), inset 0 0 24px rgba(0, 0, 0, 0.35);
+        backdrop-filter: blur(2px);
+      }
+
+      /* Wind compass, top-left */
+      #compass-wrap {
+        position: absolute; top: 18px; left: 18px;
+        width: 150px; padding: 12px 12px 8px; text-align: center;
+      }
+      #compass { width: 124px; height: 124px; display: block; margin: 0 auto; }
+      #wind-readout { margin-top: 6px; font-size: 12px; color: var(--parchment-dim); letter-spacing: 0.04em; }
+      #wind-readout b { color: var(--gold-bright); }
+
+      /* Telemetry, top-right */
+      #telemetry {
+        position: absolute; top: 18px; right: 18px; width: 210px; padding: 12px 14px;
+      }
+      #telemetry h2 {
+        font: 600 12px/1 system-ui; letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--gold); margin-bottom: 10px; border-bottom: 1px solid rgba(224,173,77,0.3); padding-bottom: 6px;
+      }
+      .meter { margin-bottom: 9px; }
+      .meter .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--parchment-dim); margin-bottom: 3px; letter-spacing: 0.05em; }
+      .meter .lbl b { color: var(--parchment); font-weight: 600; }
+      .bar { height: 9px; border-radius: 5px; background: rgba(0,0,0,0.5); overflow: hidden; border: 1px solid rgba(0,0,0,0.4); }
+      .bar > i { display: block; height: 100%; width: 0%; border-radius: 5px; transition: width 0.12s linear; }
+      .bar.sail > i { background: linear-gradient(90deg, #b8d8e6, #eef7fb); }
+      .bar.rudder { position: relative; }
+      .bar.rudder > i { background: var(--gold); position: absolute; left: 50%; width: 0%; }
+      #irons { margin-top: 8px; text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+        color: #ffcf5a; text-shadow: 0 0 8px rgba(255,160,40,0.7); opacity: 0; transition: opacity 0.2s; }
+      #irons.on { opacity: 1; }
+
+      /* Player health, bottom-center */
+      #player-status {
+        position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+        width: 360px; max-width: 70vw; padding: 10px 14px 12px; text-align: center;
+      }
+      #player-status .name { font: 700 13px/1 Georgia, serif; letter-spacing: 0.1em; color: var(--gold-bright); margin-bottom: 7px; }
+      #hp-bar { height: 16px; border-radius: 8px; }
+      #hp-bar > i { background: linear-gradient(90deg, #6fb43a, #a6e05a); width: 100%; transition: width 0.25s ease, background 0.25s; }
+
+      /* Objective / enemy tally, bottom-left */
+      #objective { position: absolute; bottom: 18px; left: 18px; padding: 9px 14px; font-size: 12px; letter-spacing: 0.04em; }
+      #objective b { color: var(--gold-bright); font-size: 15px; }
+
+      /* FPS, very top center */
+      #fps { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font: 600 11px/1 ui-monospace, monospace;
+        color: rgba(241,226,191,0.7); padding: 4px 10px; background: rgba(0,0,0,0.35); border-radius: 0 0 8px 8px; }
+
+      /* Controls hint, bottom-right */
+      #hint { position: absolute; bottom: 16px; right: 18px; width: 230px; padding: 10px 12px; font-size: 11px; line-height: 1.6; color: var(--parchment-dim); }
+      #hint b { color: var(--gold); font-weight: 700; }
+      #hint kbd { display: inline-block; min-width: 16px; padding: 1px 5px; border-radius: 4px; background: rgba(0,0,0,0.5);
+        border: 1px solid rgba(224,173,77,0.4); color: var(--parchment); font: 600 10px/1.4 ui-monospace, monospace; }
+
+      /* Crosshair */
+      #crosshair { position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; transform: translate(-50%, -50%); opacity: 0.85; }
+      #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(246,207,110,0.85); box-shadow: 0 0 4px rgba(0,0,0,0.8); }
+      #crosshair::before { left: 50%; top: 0; width: 2px; height: 34px; transform: translateX(-50%); }
+      #crosshair::after { top: 50%; left: 0; height: 2px; width: 34px; transform: translateY(-50%); }
+      #crosshair .ring { position: absolute; inset: 7px; border: 2px solid rgba(246,207,110,0.6); border-radius: 50%; }
+      #fire-side { position: absolute; top: 52%; left: 50%; transform: translateX(-50%); font: 700 11px/1 system-ui;
+        letter-spacing: 0.18em; color: var(--gold-bright); text-shadow: 0 0 6px #000; white-space: nowrap; }
+
+      /* Floating enemy health bars */
+      #nameplates { position: absolute; inset: 0; }
+      .nameplate { position: absolute; transform: translate(-50%, -100%); width: 90px; text-align: center; transition: opacity 0.2s; }
+      .nameplate .np-name { font: 700 10px/1.2 Georgia, serif; color: #ffd9c0; text-shadow: 0 1px 3px #000; letter-spacing: 0.04em; }
+      .nameplate .np-bar { height: 6px; margin-top: 2px; border-radius: 3px; background: rgba(0,0,0,0.6); border: 1px solid rgba(0,0,0,0.5); overflow: hidden; }
+      .nameplate .np-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #c23b2c, #e8694f); }
+
+      /* Transient center banner */
+      #banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+        font: 800 40px/1 Georgia, serif; color: var(--gold-bright); text-shadow: 0 3px 14px rgba(0,0,0,0.9), 0 0 30px rgba(255,160,40,0.4);
+        opacity: 0; transition: opacity 0.4s ease, transform 0.4s ease; text-align: center; }
+      #banner.show { opacity: 1; }
+
+      /* ---------- Start / end screen ---------- */
+      #screen {
+        position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding: 24px; z-index: 10;
+        background:
+          radial-gradient(120% 90% at 50% 0%, rgba(40,80,110,0.55), rgba(8,16,24,0.92) 60%),
+          linear-gradient(180deg, #0d2233, #06101a);
+        transition: opacity 0.7s ease;
+      }
+      #screen.hidden { opacity: 0; pointer-events: none; }
+      #screen h1 {
+        font: 900 clamp(40px, 9vw, 92px)/0.95 Georgia, "Times New Roman", serif;
+        letter-spacing: 0.02em; color: var(--gold-bright);
+        text-shadow: 0 4px 0 #6e4a14, 0 6px 24px rgba(0,0,0,0.7), 0 0 40px rgba(224,173,77,0.25);
+      }
+      #screen .sub { margin-top: 10px; font: 400 clamp(14px,2.4vw,19px)/1.5 Georgia, serif; color: var(--parchment-dim); font-style: italic; }
+      #start-btn {
+        pointer-events: auto; margin-top: 34px; cursor: pointer;
+        font: 700 20px/1 Georgia, serif; letter-spacing: 0.08em; color: var(--wood-deep);
+        padding: 16px 42px; border: none; border-radius: 12px;
+        background: linear-gradient(180deg, var(--gold-bright), var(--gold) 60%, #b6822f);
+        box-shadow: 0 6px 0 #6e4a14, 0 14px 30px rgba(0,0,0,0.5);
+        transition: transform 0.08s ease, box-shadow 0.08s ease;
+      }
+      #start-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 0 #6e4a14, 0 18px 36px rgba(0,0,0,0.55); }
+      #start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #6e4a14, 0 8px 18px rgba(0,0,0,0.5); }
+      #start-btn[disabled] { filter: grayscale(0.5) brightness(0.8); cursor: progress; }
+      #controls-card {
+        margin-top: 34px; max-width: 560px; width: 100%; padding: 18px 22px; text-align: left;
+      }
+      #controls-card h3 { font: 700 12px/1 system-ui; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+      #controls-card .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; font-size: 13px; color: var(--parchment); }
+      #controls-card .grid span { color: var(--parchment-dim); }
+      #controls-card kbd { display: inline-block; min-width: 18px; text-align: center; padding: 2px 6px; border-radius: 4px;
+        background: #1c130a; border: 1px solid rgba(224,173,77,0.45); color: var(--gold-bright); font: 600 11px/1.3 ui-monospace, monospace; }
+      #screen .footnote { margin-top: 26px; font-size: 11px; color: rgba(241,226,191,0.45); }
+      #boot-msg { margin-top: 16px; font-size: 13px; color: var(--sea); min-height: 18px; letter-spacing: 0.05em; }
+      #screen.over h1 { color: #e8694f; text-shadow: 0 4px 0 #4a140e, 0 6px 24px rgba(0,0,0,0.8); }
+    </style>
+
+    <!-- Local, offline-safe library resolution (vendored under lib/) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./lib/three/three.module.js",
+          "three/addons/": "./lib/three/addons/"
+        }
+      }
+    </script>
+    <!-- Ammo.js (WebAssembly physics) exposes a global Ammo() factory -->
+    <script src="./lib/ammo/ammo.wasm.js"></script>
+  </head>
+  <body>
+    <div id="game"></div>
+
+    <!-- In-game HUD -->
+    <div id="hud">
+      <div id="fps">-- fps</div>
+
+      <div id="compass-wrap" class="panel">
+        <canvas id="compass" width="248" height="248"></canvas>
+        <div id="wind-readout">WIND <b id="wind-kn">--</b></div>
+      </div>
+
+      <div id="telemetry" class="panel">
+        <h2>Helm</h2>
+        <div class="meter">
+          <div class="lbl"><span>Speed</span><b id="speed-val">0.0 kn</b></div>
+          <div class="bar sail" style="opacity:.0;height:0;margin:0;border:0"></div>
+        </div>
+        <div class="meter">
+          <div class="lbl"><span id="sail-label">Throttle</span><b id="sail-val">0%</b></div>
+          <div class="bar sail"><i id="sail-fill"></i></div>
+        </div>
+        <div class="meter">
+          <div class="lbl"><span>Rudder</span><b id="rudder-val">amidships</b></div>
+          <div class="bar rudder"><i id="rudder-fill"></i></div>
+        </div>
+        <div id="irons">⚠ IN IRONS — luffing</div>
+      </div>
+
+      <div id="objective" class="panel">Enemy galleons: <b id="enemy-count">0</b></div>
+
+      <div id="player-status" class="panel">
+        <div class="name" id="player-name">🌊 SEA SERPENT</div>
+        <div id="hp-bar" class="bar"><i></i></div>
+      </div>
+
+      <div id="hint" class="panel">
+        <b>Throttle:</b> <kbd>W</kbd>/<kbd>S</kbd> &nbsp; <b>Steer:</b> <kbd>A</kbd>/<kbd>D</kbd><br />
+        <b>Aim:</b> mouse &nbsp; <b>Fire gun:</b> hold click / <kbd>Space</kbd><br />
+        <kbd>Esc</kbd> free cursor &nbsp; <kbd>R</kbd> re-launch
+      </div>
+
+      <div id="crosshair"><div class="ring"></div></div>
+      <div id="fire-side"></div>
+      <div id="nameplates"></div>
+      <div id="banner"></div>
+    </div>
+
+    <!-- Start / game-over screen -->
+    <div id="screen">
+      <h1>Shiver&nbsp;Me&nbsp;Timbers</h1>
+      <div class="sub" id="screen-sub">Raid the armada on a jet ski — rake the galleons down with the rear gun.</div>
+      <button id="start-btn">⚔ Hoist the Colours</button>
+      <div id="boot-msg"></div>
+      <div id="controls-card" class="panel">
+        <h3>The Pirate's Code (Controls)</h3>
+        <div class="grid">
+          <div><kbd>W</kbd> <kbd>S</kbd> <span>— throttle / brake</span></div>
+          <div><kbd>A</kbd> <kbd>D</kbd> <span>— steer the jet ski</span></div>
+          <div><span>Mouse</span> <span>— pan camera / aim the gun</span></div>
+          <div><span>Hold Click</span> <span>— fire the machine gun</span></div>
+          <div><kbd>Space</kbd> <span>— fire (alternate)</span></div>
+          <div><kbd>Esc</kbd> <span>— release the cursor</span></div>
+        </div>
+      </div>
+      <div class="footnote">Three.js · Ammo.js (WASM) · custom GLSL Gerstner seas · procedural audio</div>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

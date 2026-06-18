@@ -1,0 +1,44 @@
+---
+import Base from '../layouts/Base.astro';
+import { getConfig } from '../lib/data';
+
+const config = (await getConfig()).data?.config ?? null;
+---
+
+<Base
+	title={`Shiver me Timbers · ${config?.seo?.title ?? 'ARMADA'}`}
+	description="Raid the armada on a jet ski with a rear-mounted machine gun — a browser-based 3D pirate naval combat game built with Three.js, Ammo.js (WebAssembly) and a custom GLSL Gerstner ocean."
+>
+	<main class="mx-auto max-w-6xl px-6 py-8">
+		<header class="mb-5 flex flex-col gap-3">
+			<h1 class="text-4xl font-semibold tracking-tight">Shiver me Timbers</h1>
+			<p class="max-w-3xl text-muted-foreground">
+				Raid the armada on a jet ski with a rear-mounted machine gun. Outrun the
+				galleons, swing the camera, and rake them down across a living, wind-blown
+				sea. Runs entirely in your browser — Three.js rendering, Ammo.js
+				(WebAssembly) physics, and a custom GLSL Gerstner ocean.
+			</p>
+			<div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
+				<span><kbd class="rounded border bg-card px-1.5 py-0.5 font-mono text-xs">W</kbd> / <kbd class="rounded border bg-card px-1.5 py-0.5 font-mono text-xs">S</kbd> throttle</span>
+				<span><kbd class="rounded border bg-card px-1.5 py-0.5 font-mono text-xs">A</kbd> / <kbd class="rounded border bg-card px-1.5 py-0.5 font-mono text-xs">D</kbd> steer</span>
+				<span>Mouse to aim</span>
+				<span>Hold click / <kbd class="rounded border bg-card px-1.5 py-0.5 font-mono text-xs">Space</kbd> to fire</span>
+			</div>
+		</header>
+
+		<div class="overflow-hidden rounded-xl border bg-black shadow-lg">
+			<iframe
+				src="/shiver-me-timbers/index.html"
+				title="Shiver me Timbers — 3D pirate naval combat"
+				class="block w-full border-0"
+				style="height: min(78vh, 760px);"
+				allow="pointer-lock; fullscreen; autoplay; gamepad"
+			></iframe>
+		</div>
+
+		<p class="mt-4 text-xs text-muted-foreground">
+			Tip: click the game to capture the mouse, then <kbd class="rounded border bg-card px-1 py-0.5 font-mono">Esc</kbd> to release it.
+			Best in a Chromium or WebKit browser.
+		</p>
+	</main>
+</Base>
