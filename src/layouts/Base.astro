@@ -37,6 +37,17 @@ const config = (await getConfig()).data?.config ?? null;
 		</TinaIsland>
 		<KrakenEasterEgg />
 		<MessageInABottle />
+		{/* YakShaver "Record an issue" widget — injects a self-contained iframe
+		   (floating button, bottom-right) so visitors can record their screen and
+		   file a GitHub issue. Loaded site-wide via this global layout. It does not
+		   touch the site's styles or layout and is safe to load async. `is:inline`
+		   keeps the third-party tag verbatim (Astro must not bundle/transform it). */}
+		<script
+			src="https://project-bs77f.vercel.app/embed.js"
+			data-yak-key="yak_pub_eb6b558748a729dd2470c490ae320abcf3592f914bb4df9c"
+			async
+			is:inline
+		></script>
 	</body>
 </html>
 
