@@ -3,6 +3,7 @@ import BaseHead from '../components/BaseHead.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import KrakenEasterEgg from '../components/KrakenEasterEgg.astro';
+import HoistTheColours from '../components/HoistTheColours.astro';
 import MessageInABottle from '../components/MessageInABottle.astro';
 import OceanHero from '../components/hero/OceanHero.astro';
 import TinaIsland from '@tinacms/astro/TinaIsland.astro';
@@ -36,6 +37,7 @@ const config = (await getConfig()).data?.config ?? null;
 			<Footer config={config} />
 		</TinaIsland>
 		<KrakenEasterEgg />
+		<HoistTheColours />
 		<MessageInABottle />
 	</body>
 </html>

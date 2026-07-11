@@ -1,0 +1,297 @@
+---
+// HoistTheColours — the Konami-code "hoist the colours" easter egg (#191).
+//
+// Entering the classic Konami code (↑↑↓↓←→←→BA) hoists a pirate flag up a mast
+// that rises from the bottom of the viewport, with a brief dependency-free
+// confetti burst. A click anywhere or Esc lowers the colours. Purely decorative
+// and client-side — no backend, no audio, no dependencies.
+//
+// Ground rules honoured here:
+// - Fires at most once per page load (reset on astro:after-swap, which counts
+//   as a fresh page for the ClientRouter).
+// - Never traps focus: the scene is pointer-events:none except the flag art
+//   itself, focus is never moved, and there is no modal semantics — the page
+//   stays scrollable and usable behind it.
+// - prefers-reduced-motion: the flag appears statically at the masthead with
+//   no hoist animation and no confetti.
+// - The key listener is delegated from `document` and guarded by a window flag
+//   so it survives Astro ClientRouter route swaps and Tina re-renders (same
+//   convention as KrakenEasterEgg.astro / ThemeToggle.astro).
+//
+// Listener etiquette: KrakenEasterEgg owns the typed word "kraken"; this
+// component owns the Konami code. Both delegate from `document` without
+// preventDefault, so they never fight each other or the page.
+---
+
+<div id="hoist-colours" class="hoist-colours" hidden>
+	<!-- Mast + flag: the only click target in the scene. -->
+	<svg
+		class="hoist-scene"
+		viewBox="0 0 220 460"
+		role="img"
+		aria-label="The colours are hoisted! A pirate flag climbs the mast — click anywhere or press Esc to lower it."
+	>
+		<!-- Mast, crosstree and masthead truck. -->
+		<g class="hoist-mast-parts" fill="oklch(0.35 0.05 60)">
+			<rect x="166" y="14" width="10" height="446" rx="4" />
+			<rect x="136" y="52" width="70" height="7" rx="3.5" />
+			<circle cx="171" cy="12" r="8" fill="oklch(0.55 0.11 78)" />
+		</g>
+		<!-- Halyard line the flag rides on. -->
+		<line x1="162" y1="20" x2="162" y2="440" stroke="oklch(0.55 0.11 78 / 0.55)" stroke-width="2" stroke-dasharray="4 6" />
+
+		<!-- The Jolly Roger. Drawn at the masthead; the hoist animation raises it from the foot of the mast. -->
+		<g class="hoist-flag">
+			<path
+				class="hoist-flag-cloth"
+				d="M166 22 L26 30 C36 44 30 58 24 70 C34 84 28 96 26 108 L166 116 Z"
+				fill="oklch(0.19 0.04 252)"
+				stroke="oklch(0.55 0.11 78 / 0.7)"
+				stroke-width="2"
+			/>
+			<!-- Skull and crossbones — decorative detail on the cloth. -->
+			<g fill="oklch(0.96 0.02 90)" transform="translate(88 68)">
+				<path d="M0 -22 C -13 -22 -20 -13 -20 -3 C -20 4 -16 9 -11 11 L -11 17 L 11 17 L 11 11 C 16 9 20 4 20 -3 C 20 -13 13 -22 0 -22 Z" />
+				<circle cx="-7.5" cy="-5" r="4.5" fill="oklch(0.19 0.04 252)" />
+				<circle cx="7.5" cy="-5" r="4.5" fill="oklch(0.19 0.04 252)" />
+				<path d="M -3 6 L 0 1 L 3 6 Z" fill="oklch(0.19 0.04 252)" />
+				<g stroke="oklch(0.96 0.02 90)" stroke-width="6" stroke-linecap="round">
+					<line x1="-24" y1="24" x2="24" y2="38" />
+					<line x1="24" y1="24" x2="-24" y2="38" />
+				</g>
+			</g>
+		</g>
+	</svg>
+
+	<p class="hoist-caption">Hoist the colours! &mdash; click or press Esc to lower them</p>
+</div>
+
+<style>
+	.hoist-colours {
+		position: fixed;
+		bottom: 0;
+		left: clamp(0.5rem, 5vw, 4rem);
+		z-index: 9990; /* above page chrome (bottle is 40), below the Kraken overlay (9999) */
+		/* The scene never blocks the page — only the flag art takes clicks. */
+		pointer-events: none;
+		animation: hoist-mast-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	}
+
+	.hoist-colours[hidden] {
+		display: none;
+	}
+
+	.hoist-scene {
+		display: block;
+		width: clamp(140px, 22vw, 220px);
+		height: auto;
+		max-height: min(72vh, 460px);
+		pointer-events: auto;
+		cursor: pointer;
+		filter: drop-shadow(0 4px 18px oklch(0.19 0.04 252 / 0.45));
+	}
+
+	.hoist-flag {
+		/* Starts at the foot of the mast, climbs to the masthead where it is drawn. */
+		animation: hoist-flag-climb 1400ms cubic-bezier(0.34, 1.2, 0.5, 1) both;
+		animation-delay: 550ms;
+	}
+
+	.hoist-flag-cloth {
+		transform-origin: 166px 69px;
+		animation: hoist-flag-flutter 1800ms ease-in-out 2000ms 3;
+	}
+
+	.hoist-caption {
+		margin: 0 0 0.75rem;
+		padding: 0.4rem 0.9rem;
+		border-radius: var(--radius-md);
+		background: oklch(0.19 0.04 252 / 0.75);
+		color: oklch(0.96 0.02 90);
+		font-family: var(--font-serif);
+		font-size: clamp(0.8rem, 2vw, 0.95rem);
+		letter-spacing: 0.02em;
+		text-align: center;
+		width: max-content;
+		max-width: min(80vw, 20rem);
+		pointer-events: none;
+		animation: hoist-fade-in 400ms ease-out 1600ms both;
+	}
+
+	@keyframes hoist-mast-rise {
+		from { transform: translateY(105%); }
+		to { transform: translateY(0); }
+	}
+
+	@keyframes hoist-flag-climb {
+		from { transform: translateY(330px); }
+		to { transform: translateY(0); }
+	}
+
+	@keyframes hoist-flag-flutter {
+		0%, 100% { transform: skewY(0deg); }
+		25% { transform: skewY(-2.2deg); }
+		75% { transform: skewY(1.8deg); }
+	}
+
+	@keyframes hoist-fade-in {
+		from { opacity: 0; }
+		to { opacity: 1; }
+	}
+
+	/* Reduced motion: the colours simply appear, already at the masthead. */
+	@media (prefers-reduced-motion: reduce) {
+		.hoist-colours,
+		.hoist-flag,
+		.hoist-flag-cloth,
+		.hoist-caption {
+			animation: none;
+			transform: none;
+			opacity: 1;
+		}
+	}
+</style>
+
+<script is:inline>
+	// Bound once per browser session via a window guard; state resets per page
+	// load (and per ClientRouter swap) so the egg fires at most once per page.
+	if (!window.__hoistColoursBound) {
+		window.__hoistColoursBound = true;
+
+		// Konami: up up down down left right left right b a
+		var HOIST_KONAMI = [
+			'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
+			'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
+			'b', 'a',
+		];
+
+		var pos = 0;
+		var shown = false;       // currently on screen
+		var firedThisPage = false; // at most once per page load
+
+		function prefersReducedMotion() {
+			return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+		}
+
+		function isTyping(el) {
+			if (!el) return false;
+			var tag = el.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+			if (el.isContentEditable) return true;
+			return false;
+		}
+
+		function scene() {
+			return document.getElementById('hoist-colours');
+		}
+
+		function hoist() {
+			// Always reset the sequence — even when the egg can't fire again this
+			// page. Otherwise pos sticks past the end of HOIST_KONAMI and the
+			// keydown matcher reads .length of undefined on every later keypress.
+			pos = 0;
+			if (shown || firedThisPage) return;
+			var el = scene();
+			if (!el) return;
+			shown = true;
+			firedThisPage = true;
+			el.hidden = false;
+			if (!prefersReducedMotion()) {
+				// Burst when the flag reaches the masthead (matches the CSS timing).
+				setTimeout(function () {
+					if (shown) confettiBurst(el);
+				}, 1500);
+			}
+		}
+
+		function lower() {
+			var el = scene();
+			if (el) el.hidden = true;
+			shown = false;
+		}
+
+		// Brief dependency-free confetti burst near the masthead, using the Web
+		// Animations API. pointer-events:none so it can never block the page.
+		function confettiBurst(anchor) {
+			var rect = anchor.getBoundingClientRect();
+			var originX = rect.left + rect.width * 0.7;
+			var originY = Math.max(rect.top, 8) + 24;
+			var colors = [
+				'oklch(0.55 0.11 78)',  // brass gold
+				'oklch(0.96 0.02 90)',  // sailcloth cream
+				'oklch(0.46 0.085 220)', // sea teal
+				'oklch(0.55 0.18 25)',  // signal red
+				'oklch(0.19 0.04 252)', // deep navy
+			];
+			var host = document.createElement('div');
+			host.setAttribute('aria-hidden', 'true');
+			host.style.cssText =
+				'position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:9991;';
+			document.body.appendChild(host);
+
+			for (var i = 0; i < 48; i++) {
+				var piece = document.createElement('span');
+				var size = 5 + Math.random() * 6;
+				piece.style.cssText =
+					'position:absolute;display:block;' +
+					'left:' + originX + 'px;top:' + originY + 'px;' +
+					'width:' + size + 'px;height:' + (size * 0.6) + 'px;' +
+					'background:' + colors[i % colors.length] + ';' +
+					'border-radius:1px;will-change:transform,opacity;';
+				host.appendChild(piece);
+
+				var angle = Math.random() * Math.PI * 2;
+				var burst = 60 + Math.random() * 140;
+				var dx = Math.cos(angle) * burst;
+				var upKick = -(40 + Math.random() * 120);
+				var fall = 160 + Math.random() * 240;
+				var spin = (Math.random() < 0.5 ? -1 : 1) * (240 + Math.random() * 480);
+				var duration = 900 + Math.random() * 700;
+
+				piece.animate(
+					[
+						{ transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+						{ transform: 'translate(' + dx * 0.7 + 'px,' + upKick + 'px) rotate(' + spin * 0.4 + 'deg)', opacity: 1, offset: 0.35 },
+						{ transform: 'translate(' + dx + 'px,' + fall + 'px) rotate(' + spin + 'deg)', opacity: 0 },
+					],
+					{ duration: duration, easing: 'cubic-bezier(0.2, 0.6, 0.4, 1)', fill: 'forwards' }
+				);
+			}
+
+			setTimeout(function () {
+				host.remove();
+			}, 1800);
+		}
+
+		document.addEventListener('keydown', function (e) {
+			// Never advance the code (or steal keys) while typing in a form field.
+			if (isTyping(e.target)) return;
+
+			if (shown && e.key === 'Escape') {
+				lower();
+				return;
+			}
+
+			var expected = HOIST_KONAMI[pos];
+			var matches = e.key === expected
+				|| (expected.length === 1 && e.key.toLowerCase() === expected.toLowerCase());
+			pos = matches ? pos + 1 : (e.key === HOIST_KONAMI[0] ? 1 : 0);
+			if (pos >= HOIST_KONAMI.length) hoist();
+		});
+
+		// Any click lowers the colours (the scene itself is the only part of the
+		// egg that takes pointer events, so page clicks land on the page as usual).
+		document.addEventListener('click', function () {
+			if (shown) lower();
+		});
+
+		// ClientRouter swaps replace the DOM: tidy before, and treat the swapped-in
+		// document as a fresh page load (state reset) after.
+		document.addEventListener('astro:before-swap', lower);
+		document.addEventListener('astro:after-swap', function () {
+			shown = false;
+			firedThisPage = false;
+			pos = 0;
+		});
+	}
+</script>
