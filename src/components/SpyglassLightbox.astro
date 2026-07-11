@@ -1,0 +1,362 @@
+---
+// SpyglassLightbox — "through the spyglass" image lightbox on post images (#210).
+//
+// Every content image inside a post body (`<img>` inside the `.prose` block
+// rendered by BlogBody — NOT the hero image, nav, or icons, which live outside
+// `.prose`) becomes a lightbox trigger: click (or Tab + Enter/Space) opens the
+// image enlarged, up to 90vw/90vh, in a modal overlay with the alt text shown
+// as a caption. Images wrapped in links are left alone so their navigation
+// keeps working. No dependencies.
+//
+// Rendered ONLY by the BlogPost layout, so it exists on post body pages alone;
+// the delegated script no-ops when no `.prose` images are present after a
+// ClientRouter swap to another page. Listeners are bound once to document and
+// guarded by a window flag so they survive Astro ClientRouter swaps and Tina
+// re-renders (same convention as PlunderCode.astro / SpyglassSearch.astro).
+//
+// Behaviour notes:
+// - Triggers attach on first load, on astro:page-load AND astro:after-swap,
+//   and after Tina visual-editor re-renders (a rAF-debounced MutationObserver
+//   re-runs the idempotent enhance pass). Each image is enhanced at most once.
+// - Accessibility: each trigger gets role="button" + tabindex="0" with an
+//   aria-label built from its alt text, so it is keyboard-activatable. The
+//   overlay is role="dialog" aria-modal="true"; the close button is the sole
+//   focusable control, focus moves to it on open, Tab is trapped on it, and
+//   Escape or a click outside the dialog closes and restores focus to the
+//   trigger. Page scroll is locked while open (same html-overflow lock as
+//   SpyglassSearch).
+// - Reduced motion: the zoom-in animation and backdrop blur are disabled —
+//   open/close are instant.
+// - All colours come from the global theme CSS variables, so the overlay reads
+//   correctly in all five themes (light / dark / storm / tropical / abyss).
+// - Hidden in print.
+---
+
+<div id="lightbox-overlay" class="lightbox-overlay" hidden>
+	<div class="lightbox-backdrop" data-lightbox-backdrop></div>
+	<figure
+		id="lightbox-dialog"
+		class="lightbox-dialog"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Enlarged image"
+	>
+		<button
+			id="lightbox-close"
+			type="button"
+			class="lightbox-close"
+			aria-label="Close enlarged image (Escape)"
+		>
+			<span aria-hidden="true">&times;</span>
+		</button>
+		<img id="lightbox-img" class="lightbox-img" alt="" />
+		<figcaption id="lightbox-caption" class="lightbox-caption" aria-hidden="true" hidden></figcaption>
+	</figure>
+</div>
+
+<style is:global>
+	/* Global (not scoped) because the trigger attributes are added by the
+	   script below to Tina-rendered prose images, so Astro's scoped-style
+	   attributes would never match them. */
+	.prose img[data-lightbox='true'] {
+		cursor: zoom-in;
+	}
+
+	.prose img[data-lightbox='true']:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 3px;
+	}
+
+	.lightbox-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 65; /* above the spyglass search (60) and bottle (40), below the Kraken (9999) */
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1.25rem;
+	}
+
+	.lightbox-overlay[hidden] {
+		display: none;
+	}
+
+	.lightbox-backdrop {
+		position: absolute;
+		inset: 0;
+		background: oklch(0.15 0.03 252 / 0.78);
+		backdrop-filter: blur(3px);
+		-webkit-backdrop-filter: blur(3px);
+	}
+
+	.lightbox-dialog {
+		position: relative;
+		margin: 0;
+		max-width: 90vw;
+		max-height: 90vh;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.65rem;
+		animation: lightbox-zoom 180ms ease-out both;
+	}
+
+	.lightbox-img {
+		display: block;
+		max-width: 90vw;
+		/* Leave headroom inside the 90vh budget for the caption row. */
+		max-height: calc(90vh - 3.5rem);
+		width: auto;
+		height: auto;
+		object-fit: contain;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--popover);
+		box-shadow: 0 24px 64px oklch(0.15 0.04 252 / 0.55);
+	}
+
+	.lightbox-caption {
+		max-width: min(90vw, 48rem);
+		padding: 0.35rem 0.9rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--popover);
+		color: var(--popover-foreground);
+		font-size: 0.85rem;
+		line-height: 1.5;
+		text-align: center;
+	}
+
+	.lightbox-caption[hidden] {
+		display: none;
+	}
+
+	.lightbox-close {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.25rem;
+		height: 2.25rem;
+		border: 1px solid var(--border);
+		border-radius: 9999px;
+		background: var(--popover);
+		color: var(--popover-foreground);
+		font-size: 1.35rem;
+		line-height: 1;
+		cursor: pointer;
+		box-shadow: 0 2px 8px oklch(0.15 0.04 252 / 0.35);
+		transition: background-color 140ms ease, color 140ms ease;
+	}
+
+	.lightbox-close:hover {
+		background: var(--accent);
+		color: var(--accent-foreground);
+	}
+
+	.lightbox-close:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px var(--ring);
+	}
+
+	@keyframes lightbox-zoom {
+		from { opacity: 0; transform: scale(0.94); }
+		to { opacity: 1; transform: scale(1); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.lightbox-dialog { animation: none; }
+		.lightbox-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+		.lightbox-close { transition: none; }
+	}
+
+	@media print {
+		.lightbox-overlay { display: none !important; }
+	}
+</style>
+
+<script is:inline>
+	// Bind once and delegate from document so the lightbox survives Astro
+	// ClientRouter swaps and Tina re-renders (same convention as
+	// PlunderCode.astro / SpyglassSearch.astro). All element lookups happen at
+	// call time by id, so freshly swapped-in DOM keeps working.
+	if (!window.__lightboxBound) {
+		window.__lightboxBound = true;
+
+		var lightboxLastFocus = null;
+		var lightboxRaf = 0;
+
+		function lightboxEls() {
+			return {
+				overlay: document.getElementById('lightbox-overlay'),
+				dialog: document.getElementById('lightbox-dialog'),
+				img: document.getElementById('lightbox-img'),
+				caption: document.getElementById('lightbox-caption'),
+				close: document.getElementById('lightbox-close'),
+			};
+		}
+
+		function lightboxIsOpen() {
+			var overlay = document.getElementById('lightbox-overlay');
+			return !!overlay && !overlay.hidden;
+		}
+
+		// Idempotent: turns each post-body prose image into a keyboard-activatable
+		// lightbox trigger once. Linked images are skipped so their navigation
+		// keeps working; the hero/nav/icons live outside `.prose` and are never
+		// touched. Safe to call repeatedly (load, swaps, Tina re-renders).
+		function lightboxEnhance() {
+			// Only arm images on pages that actually mount the lightbox overlay
+			// (the BlogPost layout). `.prose` is also used by landing-page blocks
+			// (Content/Split), and this once-bound script keeps running after
+			// ClientRouter swaps to those pages — without the overlay, armed
+			// images would be keyboard-focusable buttons that do nothing.
+			if (!document.getElementById('lightbox-overlay')) return;
+			var imgs = document.querySelectorAll('.prose img');
+			for (var i = 0; i < imgs.length; i++) {
+				var img = imgs[i];
+				if (img.getAttribute('data-lightbox') === 'true') continue; // already armed
+				if (img.closest('a')) continue; // linked image — leave the link in charge
+				img.setAttribute('data-lightbox', 'true');
+				img.setAttribute('role', 'button');
+				img.setAttribute('tabindex', '0');
+				var alt = img.getAttribute('alt') || '';
+				img.setAttribute(
+					'aria-label',
+					alt ? 'View larger image: ' + alt : 'View larger image'
+				);
+			}
+		}
+
+		function lightboxSchedule() {
+			if (lightboxRaf) return;
+			lightboxRaf = window.requestAnimationFrame(function () {
+				lightboxRaf = 0;
+				lightboxEnhance();
+			});
+		}
+
+		function lightboxOpen(trigger) {
+			var e = lightboxEls();
+			if (!e.overlay || !e.img || !e.close || lightboxIsOpen()) return;
+			lightboxLastFocus = trigger;
+
+			var alt = trigger.getAttribute('alt') || '';
+			e.img.src = trigger.currentSrc || trigger.src;
+			e.img.alt = alt;
+			if (e.dialog) e.dialog.setAttribute('aria-label', alt || 'Enlarged image');
+			if (e.caption) {
+				e.caption.textContent = alt;
+				e.caption.hidden = !alt;
+			}
+
+			e.overlay.hidden = false;
+			document.documentElement.style.overflow = 'hidden'; // lock scroll behind the modal
+			e.close.focus();
+		}
+
+		function lightboxClose(restoreFocus) {
+			var e = lightboxEls();
+			if (!e.overlay || e.overlay.hidden) return;
+			e.overlay.hidden = true;
+			document.documentElement.style.overflow = '';
+			if (
+				restoreFocus !== false &&
+				lightboxLastFocus &&
+				document.contains(lightboxLastFocus)
+			) {
+				try { lightboxLastFocus.focus(); } catch (err) {}
+			}
+			lightboxLastFocus = null;
+		}
+
+		document.addEventListener('click', function (ev) {
+			var t = ev.target;
+			if (!t || !t.closest) return;
+			if (!lightboxIsOpen()) {
+				var trigger = t.closest(".prose img[data-lightbox='true']");
+				if (trigger) {
+					ev.preventDefault();
+					lightboxOpen(trigger);
+				}
+				return;
+			}
+			if (t.closest('#lightbox-close')) {
+				lightboxClose(true);
+				return;
+			}
+			// Click anywhere outside the dialog (the backdrop) closes.
+			if (!t.closest('#lightbox-dialog')) {
+				lightboxClose(true);
+			}
+		});
+
+		document.addEventListener('keydown', function (ev) {
+			if (!lightboxIsOpen()) {
+				// Enter/Space on an enhanced image opens it (role=button semantics).
+				if (
+					(ev.key === 'Enter' || ev.key === ' ' || ev.key === 'Spacebar') &&
+					ev.target &&
+					ev.target.closest
+				) {
+					var trigger = ev.target.closest(".prose img[data-lightbox='true']");
+					if (trigger) {
+						ev.preventDefault(); // Space must not scroll the page
+						lightboxOpen(trigger);
+					}
+				}
+				return;
+			}
+
+			if (ev.key === 'Escape') {
+				ev.preventDefault();
+				lightboxClose(true);
+				return;
+			}
+
+			if (ev.key === 'Tab') {
+				// The close button is the dialog's only focusable control — trap
+				// focus on it.
+				ev.preventDefault();
+				var e = lightboxEls();
+				if (e.close) e.close.focus();
+				return;
+			}
+
+			if (ev.key === '/' || ev.key === '?') {
+				// Keep the spyglass search (`/`) and ship's manual (`?`) shut while
+				// the lightbox is open — their openers honour defaultPrevented.
+				ev.preventDefault();
+			}
+		}, true);
+		// ^ capture phase: guarantees this handler runs before the search's and
+		// manual's bubble-phase openers regardless of listener registration
+		// order, which varies with the navigation path (their once-bound
+		// listeners may predate this one after a ClientRouter swap).
+
+		// Close before a ClientRouter swap so the incoming page starts clean;
+		// the scroll lock is cleared here too (the <html> element persists).
+		document.addEventListener('astro:before-swap', function () {
+			lightboxClose(false);
+		});
+
+		// Enhance on first load AND after every ClientRouter swap, once the new
+		// page's DOM is in place. lightboxEnhance is idempotent, so re-entering a
+		// post never double-arms images.
+		document.addEventListener('astro:page-load', lightboxSchedule);
+		document.addEventListener('astro:after-swap', lightboxSchedule);
+
+		// Tina's visual editor re-renders the post body in place (no swap
+		// event) — a debounced observer re-arms fresh images. Observing the root
+		// element (not <body>) keeps it alive across body swaps.
+		new MutationObserver(lightboxSchedule).observe(document.documentElement, {
+			childList: true,
+			subtree: true,
+		});
+
+		lightboxSchedule();
+	}
+</script>

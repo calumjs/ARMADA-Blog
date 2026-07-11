@@ -4,6 +4,7 @@ import Base from './Base.astro';
 import CarvePlank from '../components/CarvePlank.astro';
 import DropAnchor from '../components/DropAnchor.astro';
 import PlunderCode from '../components/PlunderCode.astro';
+import SpyglassLightbox from '../components/SpyglassLightbox.astro';
 import VoyageProgress from '../components/VoyageProgress.astro';
 import FormattedDate from '../components/FormattedDate.astro';
 
@@ -31,6 +32,7 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 	<VoyageProgress />
 	<CarvePlank title={title} url={canonicalURL.href} />
 	<PlunderCode />
+	<SpyglassLightbox />
 	<DropAnchor url={canonicalURL.href} />
 	{/* Print-only header line (#212): title · date · reading time · canonical
 	    URL. Hidden on screen; the print stylesheet in global.css reveals it and
