@@ -5,12 +5,43 @@ import { Icon } from 'astro-icon/components';
 // applying a theme (base .dark class + data-theme attribute) is handled by the
 // shared inline script below and mirrors the THEMES registry in BaseHead.astro
 // and the CSS-variable blocks in global.css. Keep all three in sync.
+//
+// SYNC POINT: each theme's `swatch` is [--background, --primary, --accent]
+// hardcoded from that theme's CSS-variable block in src/styles/global.css
+// (`:root` for light, `.dark` for dark, `[data-theme='…']` for the presets).
+// If those variables change — or a new theme is added — update the swatch
+// values here too.
 const themes = [
-	{ id: 'light', label: 'Day at sea', icon: 'tabler:sun' },
-	{ id: 'dark', label: 'Night voyage', icon: 'tabler:moon' },
-	{ id: 'storm', label: 'Tempest watch', icon: 'tabler:bolt' },
-	{ id: 'tropical', label: 'Tropical lagoon', icon: 'tabler:sun-high' },
-	{ id: 'abyss', label: "Davy Jones' Locker", icon: 'tabler:anchor' },
+	{
+		id: 'light',
+		label: 'Day at sea',
+		icon: 'tabler:sun',
+		swatch: ['oklch(0.965 0.018 88)', 'oklch(0.46 0.085 220)', 'oklch(0.86 0.05 80)'],
+	},
+	{
+		id: 'dark',
+		label: 'Night voyage',
+		icon: 'tabler:moon',
+		swatch: ['oklch(0.19 0.04 252)', 'oklch(0.74 0.115 80)', 'oklch(0.36 0.06 215)'],
+	},
+	{
+		id: 'storm',
+		label: 'Tempest watch',
+		icon: 'tabler:bolt',
+		swatch: ['oklch(0.21 0.022 250)', 'oklch(0.80 0.13 210)', 'oklch(0.42 0.07 235)'],
+	},
+	{
+		id: 'tropical',
+		label: 'Tropical lagoon',
+		icon: 'tabler:sun-high',
+		swatch: ['oklch(0.975 0.022 95)', 'oklch(0.50 0.105 200)', 'oklch(0.84 0.09 55)'],
+	},
+	{
+		id: 'abyss',
+		label: "Davy Jones' Locker",
+		icon: 'tabler:anchor',
+		swatch: ['oklch(0.15 0.03 215)', 'oklch(0.85 0.13 185)', 'oklch(0.34 0.09 300)'],
+	},
 ];
 
 // SSR/no-JS fallback: with JS disabled the picker's active marker is set by the
@@ -48,6 +79,15 @@ const ssrDefaultTheme = 'light';
 			>
 				<Icon name={theme.icon} class="size-4 shrink-0" aria-hidden="true" />
 				<span class="flex-1">{theme.label}</span>
+				{/* Decorative 3-dot mini-palette preview: background / primary / accent. */}
+				<span class="flex shrink-0 items-center gap-1" aria-hidden="true">
+					{theme.swatch.map((color) => (
+						<span
+							class="inline-block size-2.5 rounded-full border border-foreground/20"
+							style={`background-color: ${color}`}
+						/>
+					))}
+				</span>
 				<Icon name="tabler:check" class={`size-4 shrink-0 ${theme.id === ssrDefaultTheme ? 'opacity-100' : 'opacity-0'}`} aria-hidden="true" data-theme-check />
 			</button>
 		))}
