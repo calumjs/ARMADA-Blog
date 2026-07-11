@@ -40,6 +40,14 @@ export const BlogCollection: Collection = {
       type: "image",
     },
     {
+      type: "string",
+      name: "tags",
+      label: "Tags",
+      list: true,
+      description:
+        "Used to chart 'nearby islands' — related posts that share the most tags are surfaced at the end of the post.",
+    },
+    {
       type: "rich-text",
       name: "body",
       label: "Body",

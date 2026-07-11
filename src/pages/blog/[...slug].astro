@@ -2,8 +2,10 @@
 import BlogPost from '../../layouts/BlogPost.astro';
 import TinaIsland from '@tinacms/astro/TinaIsland.astro';
 import BlogBody from '../../components/islands/BlogBody.astro';
+import NearbyIslands from '../../components/NearbyIslands.astro';
 import { getBlog, listBlogs } from '../../lib/data';
 import { islands } from '../../lib/islands';
+import { pickNearbyIslands } from '../../lib/related-posts';
 import { readingTimeMinutes } from '../../lib/reading-time';
 
 export async function getStaticPaths() {
@@ -15,6 +17,10 @@ const slug = (Astro.params.slug ?? '').toString();
 const blog = await getBlog(slug);
 const data = blog.data?.blog;
 if (!data) return new Response('Not Found', { status: 404 });
+
+// "Nearby islands" — up to 3 related posts, computed at build time from the
+// full collection (shared tags desc, then date desc, never this post).
+const nearbyPosts = pickNearbyIslands(await listBlogs(), slug);
 
 const layoutProps = {
 	title: data.title ?? '',
@@ -31,4 +37,5 @@ const layoutProps = {
 	<TinaIsland name="blog" wrapper={islands.blog.wrapper} params={{ slug }} primary>
 		<BlogBody data={data} />
 	</TinaIsland>
+	<NearbyIslands posts={nearbyPosts} />
 </BlogPost>
