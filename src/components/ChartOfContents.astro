@@ -1,0 +1,303 @@
+---
+// ChartOfContents — "chart of contents" TOC for long posts (#213).
+//
+// Built at BUILD TIME from the post's h2/h3 headings (src/lib/toc.ts walks
+// the Tina rich-text AST) and rendered by the BlogPost layout only when the
+// post has ≥3 headings. Two variants of the same nav:
+//   - `sidebar`: sticky rail beside the post on lg+ screens, with the current
+//     section highlighted via IntersectionObserver.
+//   - `inline`:  collapsed <details> ("Chart of contents 🗺️") above the post
+//     body on smaller screens.
+//
+// Fragment coordination with DropAnchor (#209): the hrefs use the exact slug
+// ids DropAnchor assigns to headings client-side — same algorithm, same
+// dedupe order (see src/lib/toc.ts) — so jumps land on real anchors and the
+// existing `.prose :is(h2,h3) { scroll-margin-top }` rule in DropAnchor keeps
+// them clear of the fixed header.
+//
+// Conventions (same as DropAnchor/PlunderCode):
+// - The script binds once to document/window behind a window flag, so it
+//   survives Astro ClientRouter swaps; the IntersectionObserver is torn down
+//   on astro:before-swap and rebuilt on astro:page-load / astro:after-swap.
+// - Section tracking maps headings to links POSITIONALLY (i-th `.prose`
+//   h2/h3 ↔ link with data-coc-index="i"), so it never races DropAnchor's
+//   rAF-deferred id assignment.
+// - Every colour comes from the theme CSS variables → correct in all five
+//   themes (light / dark / storm / tropical / abyss). Hidden in print.
+// - Keyboard accessible: native <a>/<summary> elements with visible
+//   focus-visible outlines; the current link carries aria-current="true".
+// - No dependencies.
+
+import type { TocEntry } from '../lib/toc';
+
+interface Props {
+	entries: TocEntry[];
+	variant: 'sidebar' | 'inline';
+}
+
+const { entries, variant } = Astro.props;
+---
+
+{
+	variant === 'sidebar' ? (
+		<nav class="coc-sidebar" aria-label="Chart of contents">
+			<p class="coc-title" aria-hidden="true">Chart of contents 🗺️</p>
+			<ul class="coc-list">
+				{entries.map((entry, i) => (
+					<li class:list={['coc-item', entry.depth === 3 && 'coc-item-h3']}>
+						<a class="coc-link" href={`#${entry.slug}`} data-coc-index={i}>
+							{entry.text}
+						</a>
+					</li>
+				))}
+			</ul>
+		</nav>
+	) : (
+		<details class="coc-details">
+			<summary class="coc-summary">Chart of contents 🗺️</summary>
+			<nav aria-label="Chart of contents">
+				<ul class="coc-list">
+					{entries.map((entry, i) => (
+						<li class:list={['coc-item', entry.depth === 3 && 'coc-item-h3']}>
+							<a class="coc-link" href={`#${entry.slug}`} data-coc-index={i}>
+								{entry.text}
+							</a>
+						</li>
+					))}
+				</ul>
+			</nav>
+		</details>
+	)
+}
+
+<style>
+	/* ---- Shared nav list ---- */
+	.coc-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	.coc-item-h3 {
+		padding-left: 0.875rem;
+	}
+
+	.coc-link {
+		display: block;
+		padding: 0.3rem 0.625rem;
+		border-left: 2px solid transparent;
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+		color: var(--muted-foreground);
+		font-size: 0.8125rem;
+		line-height: 1.35;
+		text-decoration: none;
+		transition: color 120ms ease, border-color 120ms ease;
+		overflow-wrap: anywhere;
+	}
+
+	.coc-link:hover {
+		color: var(--foreground);
+	}
+
+	.coc-link:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: -2px;
+	}
+
+	/* Current section — toggled by the IntersectionObserver script below. */
+	.coc-link[aria-current] {
+		color: var(--primary);
+		font-weight: 600;
+		border-left-color: var(--primary);
+		background: color-mix(in oklch, var(--primary) 9%, transparent);
+	}
+
+	/* ---- Desktop sticky sidebar (the aside wrapper in BlogPost.astro is
+	        hidden below lg) ---- */
+	.coc-sidebar {
+		/* Below the fixed header (body padding-top: 5rem) + breathing room. */
+		position: sticky;
+		top: 6.5rem;
+		max-height: calc(100vh - 8rem);
+		overflow-y: auto;
+		padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+		border-left: 1px solid var(--border);
+	}
+
+	.coc-title {
+		margin: 0 0 0.5rem;
+		padding-left: 0.625rem;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--muted-foreground);
+	}
+
+	/* ---- Mobile collapsed <details> ---- */
+	.coc-details {
+		border: 1px solid var(--border);
+		border-radius: var(--radius-md);
+		background: color-mix(in oklch, var(--foreground) 3%, transparent);
+	}
+
+	.coc-summary {
+		padding: 0.625rem 0.875rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--foreground);
+		cursor: pointer;
+		border-radius: var(--radius-md);
+		user-select: none;
+		-webkit-user-select: none;
+	}
+
+	.coc-summary:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+	}
+
+	.coc-details[open] .coc-summary {
+		border-bottom: 1px solid var(--border);
+		border-radius: var(--radius-md) var(--radius-md) 0 0;
+	}
+
+	.coc-details .coc-list {
+		padding: 0.5rem 0.625rem 0.625rem;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.coc-link {
+			transition: none;
+		}
+	}
+</style>
+
+{
+	/* Rendered once per page: BlogPost.astro always pairs the two variants,
+	   so only the sidebar instance carries the (is:inline, non-deduped)
+	   script. The window guard makes a second evaluation a no-op anyway. */
+	variant === 'sidebar' && (
+		<script is:inline>
+			// Bind once to document/window so the tracker survives Astro
+			// ClientRouter swaps (same convention as DropAnchor.astro). The
+			// observer itself is per-page: detached on astro:before-swap and
+			// rebuilt after every swap. All callbacks re-query the DOM and
+			// no-op on pages without a chart of contents.
+			if (!window.__chartOfContentsBound) {
+				window.__chartOfContentsBound = true;
+
+				var cocObserver = null;
+				var cocRaf = 0;
+
+				// The "reading line": just under the fixed header, matching the
+				// 6.5rem scroll-margin-top DropAnchor puts on .prose h2/h3.
+				var COC_LINE_PX = 110;
+
+				function cocHeadings() {
+					return document.querySelectorAll('.prose h2, .prose h3');
+				}
+
+				// Positional mapping: the i-th post heading corresponds to the
+				// links stamped data-coc-index="i" (one in each variant). This
+				// avoids racing DropAnchor's rAF-deferred slug-id assignment.
+				function cocSetActive(index) {
+					var links = document.querySelectorAll('.coc-link');
+					for (var i = 0; i < links.length; i++) {
+						if (links[i].getAttribute('data-coc-index') === String(index)) {
+							links[i].setAttribute('aria-current', 'true');
+						} else {
+							links[i].removeAttribute('aria-current');
+						}
+					}
+				}
+
+				// Current section = last heading whose top sits above the
+				// reading line; -1 (no highlight) before the first heading.
+				function cocUpdate() {
+					var heads = cocHeadings();
+					if (!heads.length) return;
+					var active = -1;
+					for (var i = 0; i < heads.length; i++) {
+						if (heads[i].getBoundingClientRect().top <= COC_LINE_PX + 1) {
+							active = i;
+						} else {
+							break;
+						}
+					}
+					cocSetActive(active);
+				}
+
+				function cocDetach() {
+					if (cocObserver) {
+						cocObserver.disconnect();
+						cocObserver = null;
+					}
+				}
+
+				// Rebuilds the observer for the current page. Idempotent; no-ops
+				// (leaving no observer behind) on pages without a TOC.
+				function cocSetup() {
+					cocDetach();
+					if (!document.querySelector('.coc-link')) return;
+					var heads = cocHeadings();
+					if (!heads.length) return;
+
+					// Entries fire whenever a heading crosses the reading line
+					// (or the viewport bottom); the callback recomputes the
+					// active section from live geometry, which stays correct
+					// even when several entries batch during fast scrolls.
+					cocObserver = new IntersectionObserver(
+						function () {
+							cocUpdate();
+						},
+						{
+							rootMargin: '-' + COC_LINE_PX + 'px 0px 0px 0px',
+							threshold: [0, 1],
+						}
+					);
+					for (var i = 0; i < heads.length; i++) {
+						cocObserver.observe(heads[i]);
+					}
+					cocUpdate();
+				}
+
+				function cocSchedule() {
+					if (cocRaf) return;
+					cocRaf = window.requestAnimationFrame(function () {
+						cocRaf = 0;
+						cocSetup();
+					});
+				}
+
+				// Collapse the mobile <details> once a destination is picked,
+				// so the jumped-to section is actually visible.
+				document.addEventListener('click', function (e) {
+					var t = e.target;
+					var link = t && t.closest ? t.closest('.coc-link') : null;
+					if (!link) return;
+					var details = link.closest('details.coc-details');
+					if (details) details.open = false;
+				});
+
+				document.addEventListener('astro:page-load', cocSchedule);
+				document.addEventListener('astro:after-swap', cocSchedule);
+
+				// Detach cleanly before the DOM is swapped out — never leave an
+				// observer watching orphaned nodes.
+				document.addEventListener('astro:before-swap', cocDetach);
+
+				// Tina's visual editor re-renders the post body in place (no
+				// swap event): a rAF-debounced observer re-arms the tracker on
+				// fresh headings. cocSetup only toggles attributes, so it never
+				// retriggers this childList observer.
+				new MutationObserver(cocSchedule).observe(document.documentElement, {
+					childList: true,
+					subtree: true,
+				});
+
+				cocSchedule();
+			}
+		</script>
+	)
+}

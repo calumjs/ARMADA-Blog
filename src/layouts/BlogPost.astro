@@ -2,11 +2,13 @@
 import { Icon } from 'astro-icon/components';
 import Base from './Base.astro';
 import CarvePlank from '../components/CarvePlank.astro';
+import ChartOfContents from '../components/ChartOfContents.astro';
 import DropAnchor from '../components/DropAnchor.astro';
 import PlunderCode from '../components/PlunderCode.astro';
 import SpyglassLightbox from '../components/SpyglassLightbox.astro';
 import VoyageProgress from '../components/VoyageProgress.astro';
 import FormattedDate from '../components/FormattedDate.astro';
+import type { TocEntry } from '../lib/toc';
 
 interface Props {
 	title: string;
@@ -16,9 +18,14 @@ interface Props {
 	heroImage?: string | null;
 	/** Estimated reading time in minutes — shown in the print-only header line. */
 	readingMinutes?: number | null;
+	/** Build-time chart of contents (h2/h3) — see src/lib/toc.ts (#213). */
+	toc?: TocEntry[];
 }
 
-const { title, description, pubDate, heroImage, readingMinutes } = Astro.props;
+const { title, description, pubDate, heroImage, readingMinutes, toc = [] } = Astro.props;
+
+// "Chart of contents" (#213): hidden entirely for posts with <3 headings.
+const showToc = toc.length >= 3;
 
 // Absolute canonical URL for this post, built from the site's configured
 // production base URL (`site` in astro.config.mjs → SITE_URL/VERCEL_URL), so
@@ -43,26 +50,44 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 		{typeof readingMinutes === 'number' && <span>{' · '}{readingMinutes} min read</span>}
 		{' · '}<span class="print-post-meta-url">{canonicalURL.href}</span>
 	</div>
-	<div class="mx-auto max-w-4xl px-6 pt-8 print:hidden">
-		<a
-			href="/blog"
-			class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-		>
-			<Icon name="tabler:arrow-left" size={16} />
-			Back to blog
-		</a>
-	</div>
-	<slot />
-	<div class="mx-auto max-w-3xl px-6 pb-16 text-center print:hidden">
-		<a
-			href={linkedInShareURL}
-			target="_blank"
-			rel="noopener noreferrer"
-			aria-label={`Share "${title}" on LinkedIn`}
-			class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-		>
-			<Icon name="tabler:brand-linkedin" size={18} />
-			Share on LinkedIn
-		</a>
+	{/* Chart of contents (#213): when the post has ≥3 h2/h3 headings the page
+	    becomes a two-column lg+ layout — post column + sticky TOC rail — and a
+	    collapsed <details> chart is offered above the body on smaller screens.
+	    With <3 headings the shell renders as a plain block: no TOC anywhere. */}
+	<div class:list={[showToc && 'lg:flex']}>
+		<div class:list={[showToc && 'min-w-0 lg:flex-1']}>
+			<div class="mx-auto max-w-4xl px-6 pt-8 print:hidden">
+				<a
+					href="/blog"
+					class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+				>
+					<Icon name="tabler:arrow-left" size={16} />
+					Back to blog
+				</a>
+			</div>
+			{showToc && (
+				<div class="mx-auto max-w-3xl px-6 pt-6 lg:hidden print:hidden">
+					<ChartOfContents entries={toc} variant="inline" />
+				</div>
+			)}
+			<slot />
+			<div class="mx-auto max-w-3xl px-6 pb-16 text-center print:hidden">
+				<a
+					href={linkedInShareURL}
+					target="_blank"
+					rel="noopener noreferrer"
+					aria-label={`Share "${title}" on LinkedIn`}
+					class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-5 py-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+				>
+					<Icon name="tabler:brand-linkedin" size={18} />
+					Share on LinkedIn
+				</a>
+			</div>
+		</div>
+		{showToc && (
+			<aside class="hidden w-64 shrink-0 pt-8 pr-6 lg:block xl:w-72 xl:pr-10 print:hidden">
+				<ChartOfContents entries={toc} variant="sidebar" />
+			</aside>
+		)}
 	</div>
 </Base>
