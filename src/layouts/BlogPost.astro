@@ -3,6 +3,7 @@ import { Icon } from 'astro-icon/components';
 import Base from './Base.astro';
 import CarvePlank from '../components/CarvePlank.astro';
 import VoyageProgress from '../components/VoyageProgress.astro';
+import FormattedDate from '../components/FormattedDate.astro';
 
 interface Props {
 	title: string;
@@ -10,9 +11,11 @@ interface Props {
 	pubDate: Date;
 	updatedDate?: Date;
 	heroImage?: string | null;
+	/** Estimated reading time in minutes — shown in the print-only header line. */
+	readingMinutes?: number | null;
 }
 
-const { title, description, heroImage } = Astro.props;
+const { title, description, pubDate, heroImage, readingMinutes } = Astro.props;
 
 // Absolute canonical URL for this post, built from the site's configured
 // production base URL (`site` in astro.config.mjs → SITE_URL/VERCEL_URL), so
@@ -25,7 +28,16 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 <Base title={title} description={description} image={heroImage ?? undefined}>
 	<VoyageProgress />
 	<CarvePlank title={title} url={canonicalURL.href} />
-	<div class="mx-auto max-w-4xl px-6 pt-8">
+	{/* Print-only header line (#212): title · date · reading time · canonical
+	    URL. Hidden on screen; the print stylesheet in global.css reveals it and
+	    hides the on-screen title block in exchange. */}
+	<div class="print-post-meta" aria-hidden="true">
+		<strong>{title}</strong>
+		{' · '}<FormattedDate date={pubDate} />
+		{typeof readingMinutes === 'number' && <span>{' · '}{readingMinutes} min read</span>}
+		{' · '}<span class="print-post-meta-url">{canonicalURL.href}</span>
+	</div>
+	<div class="mx-auto max-w-4xl px-6 pt-8 print:hidden">
 		<a
 			href="/blog"
 			class="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
@@ -35,7 +47,7 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 		</a>
 	</div>
 	<slot />
-	<div class="mx-auto max-w-3xl px-6 pb-16 text-center">
+	<div class="mx-auto max-w-3xl px-6 pb-16 text-center print:hidden">
 		<a
 			href={linkedInShareURL}
 			target="_blank"

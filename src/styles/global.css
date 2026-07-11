@@ -321,3 +321,151 @@
 @media (prefers-reduced-motion: no-preference) {
 	.star-twinkle { animation: twinkle var(--twinkle-dur, 4s) ease-in-out infinite; animation-delay: var(--d, 0s); }
 }
+
+/* ── Print — parchment stylesheet for posts (#212) ─────────────────────────
+   Posts print like readable parchment: white paper, dark navy ink, serif
+   body copy at print size, no site chrome and no floating UI. The rules are
+   global (they cost nothing on non-post pages) and the post-specific header
+   line (.print-post-meta) is rendered by the BlogPost layout. */
+
+/* Print-only post header line — hidden on screen, revealed below. */
+.print-post-meta {
+	display: none;
+}
+
+@media print {
+	/* Force a light readable palette regardless of the active theme. The
+	   doubled selectors (:root.dark, :root[data-theme]) out-specify the
+	   .dark and [data-theme='…'] token blocks above, so dark / storm /
+	   tropical / abyss all collapse to ink-on-paper when printing. */
+	:root,
+	:root.dark,
+	:root[data-theme] {
+		--background: #ffffff;
+		--foreground: #1d2433;               /* deep navy ink */
+		--card: #ffffff;
+		--card-foreground: #1d2433;
+		--popover: #ffffff;
+		--popover-foreground: #1d2433;
+		--primary: #23566b;                  /* weathered teal, print-legible */
+		--primary-foreground: #ffffff;
+		--secondary: #f3f0e7;                /* faint parchment wash */
+		--secondary-foreground: #1d2433;
+		--muted: #f3f0e7;
+		--muted-foreground: #4b5563;
+		--accent: #f3f0e7;
+		--accent-foreground: #1d2433;
+		--destructive: #8c2f22;
+		--border: #d8d3c5;
+		--input: #d8d3c5;
+		--ring: #23566b;
+	}
+
+	html,
+	body {
+		background: #ffffff !important;
+		background-image: none !important;   /* kills the abyss light-well gradients */
+		color: var(--foreground) !important;
+	}
+
+	body {
+		padding-top: 0 !important;            /* no fixed header to clear on paper */
+		font-family: var(--font-serif) !important;
+		font-size: 12pt;
+		line-height: 1.6;
+	}
+
+	/* Hide site chrome and ALL floating UI: fixed header/nav (incl. theme +
+	   language toggles and the spyglass trigger), footer widgets (tide clock),
+	   captain's wheel, message in a bottle, kraken overlay, voyage progress
+	   bar, spyglass search overlay, hoist-the-colours and the carve-into-plank
+	   selection button. */
+	header,
+	footer,
+	#carve-plank,
+	#captains-wheel,
+	.bottle-root,
+	#kraken-overlay,
+	#hoist-colours,
+	#voyage-progress,
+	#spyglass-overlay,
+	[data-theme-menu],
+	[data-lang-menu],
+	[data-spyglass-open] {
+		display: none !important;
+	}
+
+	/* Post header line: title · date · reading time · canonical URL. */
+	.print-post-meta {
+		display: block;
+		font-family: var(--font-serif);
+		font-size: 9pt;
+		color: var(--muted-foreground);
+		border-bottom: 1pt solid var(--border);
+		padding: 0 0 6pt;
+		margin: 0 0 14pt;
+	}
+	.print-post-meta strong {
+		color: var(--foreground);
+	}
+	.print-post-meta-url {
+		word-break: break-all;
+	}
+
+	/* Body copy at print size; drop screen-only shadows/decorations. */
+	.prose {
+		font-size: 12pt;
+		line-height: 1.6;
+	}
+	.prose a,
+	a {
+		color: var(--primary) !important;
+		text-decoration: underline;
+		text-shadow: none !important;
+	}
+
+	/* Body links print their destination after the text — except pure
+	   fragment links, which mean nothing on paper. */
+	.prose a[href]:not([href^='#'])::after {
+		content: ' (' attr(href) ')';
+		font-size: 0.85em;
+		color: var(--muted-foreground);
+		overflow-wrap: anywhere;
+	}
+
+	/* Code blocks wrap instead of clipping. */
+	pre,
+	code,
+	kbd,
+	samp {
+		white-space: pre-wrap !important;
+		overflow-wrap: anywhere;
+		word-break: break-word;
+	}
+	pre {
+		overflow: visible !important;
+		background: var(--secondary) !important;
+		color: var(--foreground) !important;
+		border: 1pt solid var(--border);
+	}
+
+	/* Images fit the page width and avoid splitting across pages. */
+	img,
+	svg,
+	video {
+		max-width: 100% !important;
+		height: auto !important;
+		break-inside: avoid;
+		box-shadow: none !important;
+	}
+
+	/* Tidy page breaks. */
+	h1, h2, h3, h4 {
+		break-after: avoid;
+	}
+	blockquote,
+	figure,
+	table {
+		break-inside: avoid;
+	}
+}
