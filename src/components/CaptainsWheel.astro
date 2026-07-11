@@ -1,0 +1,206 @@
+---
+// CaptainsWheel — a captain's-wheel "back to top" button.
+//
+// A fixed bottom-right ship's wheel that fades in once the reader has scrolled
+// roughly one viewport down, and smooth-scrolls back to the top when
+// activated. Purely client-side & static — no dependencies, no network.
+//
+// Placement: it shares the bottom-right corner with MessageInABottle, so the
+// wheel is stacked DIRECTLY ABOVE the bottle (same right offset, bottom offset
+// = bottle offset + bottle size + gap) and can never overlap it. z-index 30
+// keeps it above page content but below the bottle's fortune card (z-40) and
+// the Kraken overlay (z-9999).
+//
+// Theming: every colour comes from the existing CSS variables (--card,
+// --border, --primary, --accent, --ring), so the wheel reads correctly in all
+// five themes (light / dark / storm / tropical / abyss).
+//
+// Accessibility: a real <button> with an aria-label; it is fully hidden from
+// the tab order while off-screen (visibility: hidden). The wheel turns gently
+// on hover; under prefers-reduced-motion the rotation is dropped and the
+// scroll jump is instant instead of smooth.
+//
+// The scroll/click listeners are bound once to window/document and guarded by
+// a window flag so they survive Astro ClientRouter swaps and Tina re-renders
+// (same convention as KrakenEasterEgg.astro / MessageInABottle.astro).
+---
+
+<button
+	id="captains-wheel"
+	type="button"
+	class="captains-wheel"
+	aria-label="Back to top — take the captain's wheel"
+	hidden
+>
+	<!-- Decorative eight-spoke ship's wheel, drawn in the theme's primary colour. -->
+	<svg class="captains-wheel-art" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+		<g stroke="currentColor" fill="none" stroke-linecap="round">
+			<!-- Handles: 8 pegs radiating beyond the rim -->
+			<g stroke-width="3">
+				<line x1="24" y1="2.5" x2="24" y2="8" />
+				<line x1="24" y1="40" x2="24" y2="45.5" />
+				<line x1="2.5" y1="24" x2="8" y2="24" />
+				<line x1="40" y1="24" x2="45.5" y2="24" />
+				<line x1="8.8" y1="8.8" x2="12.7" y2="12.7" />
+				<line x1="35.3" y1="35.3" x2="39.2" y2="39.2" />
+				<line x1="39.2" y1="8.8" x2="35.3" y2="12.7" />
+				<line x1="12.7" y1="35.3" x2="8.8" y2="39.2" />
+			</g>
+			<!-- Rim -->
+			<circle cx="24" cy="24" r="15" stroke-width="3.5" />
+			<!-- Spokes -->
+			<g stroke-width="2">
+				<line x1="24" y1="9.5" x2="24" y2="38.5" />
+				<line x1="9.5" y1="24" x2="38.5" y2="24" />
+				<line x1="13.7" y1="13.7" x2="34.3" y2="34.3" />
+				<line x1="34.3" y1="13.7" x2="13.7" y2="34.3" />
+			</g>
+			<!-- Hub -->
+			<circle cx="24" cy="24" r="4.5" stroke-width="2.5" fill="currentColor" fill-opacity="0.25" />
+		</g>
+	</svg>
+</button>
+
+<style>
+	.captains-wheel {
+		position: fixed;
+		/* Same right offset as MessageInABottle's .bottle-root … */
+		right: clamp(0.75rem, 2.5vw, 1.5rem);
+		/* … but lifted clear above the 3rem bottle button + a 0.75rem gap, so the
+		   two floating controls stack and can never overlap. */
+		bottom: calc(clamp(0.75rem, 2.5vh, 1.5rem) + 3rem + 0.75rem);
+		z-index: 30; /* above content, below the bottle's fortune card (40) & Kraken (9999) */
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 3rem;
+		height: 3rem;
+		padding: 0;
+		border: 1px solid var(--border);
+		border-radius: 9999px;
+		background: var(--card);
+		color: var(--primary);
+		cursor: pointer;
+		box-shadow: 0 6px 18px oklch(0.19 0.04 252 / 0.22);
+		opacity: 0;
+		visibility: hidden;
+		transform: translateY(0.5rem);
+		transition:
+			opacity 240ms ease,
+			transform 240ms ease,
+			background-color 160ms ease,
+			box-shadow 160ms ease,
+			visibility 0s linear 240ms;
+	}
+
+	/* `hidden` is only the SSR/initial state; the script drives .is-visible. */
+	.captains-wheel[hidden] {
+		display: none;
+	}
+
+	.captains-wheel.is-visible {
+		opacity: 1;
+		visibility: visible;
+		transform: translateY(0);
+		transition:
+			opacity 240ms ease,
+			transform 240ms ease,
+			background-color 160ms ease,
+			box-shadow 160ms ease,
+			visibility 0s;
+	}
+
+	.captains-wheel:hover {
+		background: var(--accent);
+		box-shadow: 0 8px 22px oklch(0.19 0.04 252 / 0.3);
+	}
+
+	.captains-wheel:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px var(--ring);
+	}
+
+	.captains-wheel-art {
+		width: 1.85rem;
+		height: 1.85rem;
+	}
+
+	/* The wheel turns gently while hovered or focused, like easing the helm over. */
+	@media (hover: hover) {
+		.captains-wheel:hover .captains-wheel-art {
+			animation: wheel-turn 6s linear infinite;
+		}
+	}
+	.captains-wheel:focus-visible .captains-wheel-art {
+		animation: wheel-turn 6s linear infinite;
+	}
+
+	@keyframes wheel-turn {
+		from {
+			transform: rotate(0deg);
+		}
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* Reduced motion: no turning, no slide — a plain fade only. */
+	@media (prefers-reduced-motion: reduce) {
+		.captains-wheel:hover .captains-wheel-art,
+		.captains-wheel:focus-visible .captains-wheel-art {
+			animation: none;
+		}
+
+		.captains-wheel,
+		.captains-wheel.is-visible {
+			transform: none;
+			transition: opacity 160ms ease, visibility 0s;
+		}
+	}
+</style>
+
+<script is:inline>
+	// Bind once to window/document so the wheel survives Astro ClientRouter swaps
+	// and Tina re-renders (same convention as KrakenEasterEgg.astro /
+	// MessageInABottle.astro). Every callback re-queries the DOM and no-ops when
+	// the button isn't present.
+	if (!window.__captainsWheelBound) {
+		window.__captainsWheelBound = true;
+
+		var wheelRaf = 0;
+
+		function wheelUpdate() {
+			wheelRaf = 0;
+			var btn = document.getElementById('captains-wheel');
+			if (!btn) return;
+			// Un-hide once JS is running; visibility is driven by .is-visible.
+			if (btn.hidden) btn.hidden = false;
+			// Fade in after ~one viewport of scroll.
+			var show = window.scrollY > window.innerHeight * 0.9;
+			btn.classList.toggle('is-visible', show);
+		}
+
+		function wheelSchedule() {
+			if (wheelRaf) return;
+			wheelRaf = window.requestAnimationFrame(wheelUpdate);
+		}
+
+		window.addEventListener('scroll', wheelSchedule, { passive: true });
+		window.addEventListener('resize', wheelSchedule, { passive: true });
+
+		document.addEventListener('click', function (ev) {
+			var t = ev.target;
+			if (!t.closest || !t.closest('#captains-wheel')) return;
+			var reduce =
+				window.matchMedia &&
+				window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+		});
+
+		// Re-evaluate on first load AND after every ClientRouter swap, once the
+		// new page's DOM (and its fresh, hidden button) is in place.
+		document.addEventListener('astro:page-load', wheelSchedule);
+		document.addEventListener('astro:after-swap', wheelSchedule);
+		wheelSchedule();
+	}
+</script>
