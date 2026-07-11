@@ -1,0 +1,72 @@
+---
+/**
+ * "Previous port / Next port" — chronological prev/next links at the end of
+ * a blog post (#214).
+ *
+ * Neighbours are computed at build time in `src/lib/port-navigation.ts`
+ * (older = "Previous port", newer = "Next port"); this component only renders
+ * whatever it is given and renders nothing at all when both sides are null.
+ * At either end of the timeline the missing side simply isn't rendered — the
+ * remaining link keeps its own grid column so "Next port" stays on the right.
+ *
+ * Each side is a single real anchor (keyboard-focusable, visible focus ring)
+ * showing a direction label plus the post title clamped to two lines. Styled
+ * purely with semantic theme tokens (border/bg-card/muted-foreground/primary)
+ * so it stays legible in all five themes, and deliberately quieter than the
+ * "nearby islands" cards below it: same card language, but a compact single
+ * row so the two sections read as distinct tiers rather than clashing.
+ */
+import { Icon } from 'astro-icon/components';
+
+interface PortLink {
+	_sys: { filename: string };
+	title?: string | null;
+}
+
+interface Props {
+	previous: PortLink | null;
+	next: PortLink | null;
+}
+
+const { previous, next } = Astro.props;
+
+const linkClasses =
+	'group flex h-full flex-col gap-1.5 rounded-xl border bg-card p-4 shadow-sm transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+const labelClasses =
+	'flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground';
+const titleClasses = 'line-clamp-2 text-sm font-semibold text-card-foreground group-hover:underline';
+---
+
+{
+	(previous || next) && (
+		<nav
+			aria-label="Previous and next posts"
+			class="mx-auto max-w-4xl px-6 pb-10 print:hidden"
+		>
+			<div class="grid gap-4 sm:grid-cols-2">
+				{previous && (
+					<a href={`/blog/${previous._sys.filename}/`} rel="prev" class={linkClasses}>
+						<span class={labelClasses}>
+							<Icon name="tabler:arrow-left" size={14} aria-hidden="true" class="text-primary" />
+							Previous port
+						</span>
+						<span class={titleClasses}>{previous.title}</span>
+					</a>
+				)}
+				{next && (
+					<a
+						href={`/blog/${next._sys.filename}/`}
+						rel="next"
+						class={`${linkClasses} text-right sm:col-start-2`}
+					>
+						<span class={`${labelClasses} justify-end`}>
+							Next port
+							<Icon name="tabler:arrow-right" size={14} aria-hidden="true" class="text-primary" />
+						</span>
+						<span class={titleClasses}>{next.title}</span>
+					</a>
+				)}
+			</div>
+		</nav>
+	)
+}
