@@ -1,7 +1,9 @@
 ---
 import Base from '../../layouts/Base.astro';
 import FormattedDate from '../../components/FormattedDate.astro';
+import ReadingTime from '../../components/ReadingTime.astro';
 import { getConfig, listBlogs } from '../../lib/data';
+import { readingTimeMinutes } from '../../lib/reading-time';
 
 const posts = await listBlogs();
 const config = (await getConfig()).data?.config ?? null;
@@ -22,11 +24,14 @@ const config = (await getConfig()).data?.config ?? null;
 						)}
 						<div class="p-6">
 							<h2 class="font-semibold group-hover:underline">{post.title}</h2>
-							{post.pubDate && (
-								<p class="mt-1 text-sm text-muted-foreground">
-									<FormattedDate date={new Date(post.pubDate)} />
-								</p>
-							)}
+							<div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+								{post.pubDate && (
+									<p class="text-sm text-muted-foreground">
+										<FormattedDate date={new Date(post.pubDate)} />
+									</p>
+								)}
+								<ReadingTime minutes={readingTimeMinutes(post.body)} />
+							</div>
 						</div>
 					</a>
 				</li>

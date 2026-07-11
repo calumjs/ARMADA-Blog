@@ -1,0 +1,26 @@
+---
+/**
+ * Nautical reading-time badge — "~N min voyage".
+ *
+ * Minutes are computed at build time (see `src/lib/reading-time.ts`).
+ * Styled purely with semantic theme tokens (border/muted/muted-foreground)
+ * so it stays legible in all five themes.
+ */
+import { Icon } from 'astro-icon/components';
+
+interface Props {
+	minutes: number;
+	class?: string;
+}
+
+const { minutes, class: className = '' } = Astro.props;
+const label = `~${minutes} min voyage`;
+---
+
+<span
+	class={`inline-flex items-center gap-1 rounded-full border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground ${className}`}
+	title={`Estimated reading time: about ${minutes} minute${minutes === 1 ? '' : 's'}`}
+>
+	<Icon name="tabler:compass" size={13} aria-hidden="true" />
+	{label}
+</span>
