@@ -1,6 +1,7 @@
 ---
 import { Icon } from 'astro-icon/components';
 import Base from './Base.astro';
+import CarvePlank from '../components/CarvePlank.astro';
 import VoyageProgress from '../components/VoyageProgress.astro';
 import FormattedDate from '../components/FormattedDate.astro';
 
@@ -26,6 +27,7 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 
 <Base title={title} description={description} image={heroImage ?? undefined}>
 	<VoyageProgress />
+	<CarvePlank title={title} url={canonicalURL.href} />
 	{/* Print-only header line (#212): title · date · reading time · canonical
 	    URL. Hidden on screen; the print stylesheet in global.css reveals it and
 	    hides the on-screen title block in exchange. */}

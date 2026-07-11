@@ -378,9 +378,11 @@
 	/* Hide site chrome and ALL floating UI: fixed header/nav (incl. theme +
 	   language toggles and the spyglass trigger), footer widgets (tide clock),
 	   captain's wheel, message in a bottle, kraken overlay, voyage progress
-	   bar, spyglass search overlay and hoist-the-colours. */
+	   bar, spyglass search overlay, hoist-the-colours and the carve-into-plank
+	   selection button. */
 	header,
 	footer,
+	#carve-plank,
 	#captains-wheel,
 	.bottle-root,
 	#kraken-overlay,
