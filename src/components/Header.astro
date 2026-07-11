@@ -30,6 +30,16 @@ const contactLinks = (config?.contactLinks ?? []).filter(item => item !== null);
 			))}
 		</div>
 		<div class="flex items-center gap-3">
+			<button
+				type="button"
+				data-spyglass-open
+				aria-label="Search posts (press /)"
+				aria-haspopup="dialog"
+				title="Search posts (press /)"
+				class="inline-flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none"
+			>
+				<Icon name="tabler:telescope" class="size-5" aria-hidden="true" />
+			</button>
 			<div class="hidden items-center gap-3 lg:flex">
 				{contactLinks.map((link) => (
 					<IconLink title={link.title} link={link.link} icon={link.icon} data-tina-field={tinaField(link, "title")} />

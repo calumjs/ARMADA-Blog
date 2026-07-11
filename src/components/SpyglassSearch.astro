@@ -1,0 +1,595 @@
+---
+// SpyglassSearch — client-side post search overlay ("the spyglass").
+//
+// Press `/` anywhere outside a text field (or click the spyglass button in
+// the Header, `[data-spyglass-open]`) to raise a modal search overlay over a
+// build-time JSON index of posts (`/search-index.json`, emitted by
+// `src/pages/search-index.json.ts`). Typing filters with a case-insensitive
+// substring match on title + description, ranked best-first (title hits beat
+// description hits, earlier hits beat later ones, newer posts break ties).
+// Enter or click navigates to the highlighted post; Escape closes the overlay
+// and restores focus to whatever had it before opening.
+//
+// Accessibility: the dialog is role="dialog" aria-modal="true"; the input is
+// a combobox driving a listbox via aria-activedescendant, so focus stays on
+// the input while ArrowUp/ArrowDown move the highlight. Tab is trapped
+// between the input and the close button. A polite live region announces the
+// result count. All theming uses the global CSS variables, so the overlay
+// follows all five themes (light / dark / storm / tropical / abyss) with no
+// per-theme styling here.
+//
+// The index is fetched once per page-load and memoised on `window`, and the
+// listeners are delegated from `document` behind a `window.__spyglassBound`
+// guard — the same convention as ThemeToggle / MessageInABottle — so the
+// overlay keeps working across Astro ClientRouter swaps (astro:after-swap)
+// and Tina visual-editor re-renders. No dependencies.
+import { Icon } from 'astro-icon/components';
+---
+
+<div id="spyglass-overlay" class="spyglass-overlay" hidden>
+	<div class="spyglass-backdrop" data-spyglass-backdrop></div>
+	<div
+		id="spyglass-dialog"
+		class="spyglass-dialog"
+		role="dialog"
+		aria-modal="true"
+		aria-label="Search posts"
+	>
+		<div class="spyglass-input-row">
+			<Icon name="tabler:telescope" class="spyglass-input-icon" aria-hidden="true" />
+			<input
+				id="spyglass-input"
+				class="spyglass-input"
+				type="text"
+				role="combobox"
+				aria-expanded="true"
+				aria-controls="spyglass-results"
+				aria-autocomplete="list"
+				aria-label="Search posts by title or description"
+				autocomplete="off"
+				autocapitalize="off"
+				autocorrect="off"
+				spellcheck="false"
+				placeholder="Scan the horizon for a post…"
+			/>
+			<button
+				id="spyglass-close"
+				type="button"
+				class="spyglass-close"
+				aria-label="Close search (Escape)"
+			>
+				<kbd class="spyglass-kbd">esc</kbd>
+			</button>
+		</div>
+		<ul id="spyglass-results" class="spyglass-results" role="listbox" aria-label="Matching posts"></ul>
+		<p id="spyglass-status" class="spyglass-sr-only" role="status" aria-live="polite"></p>
+	</div>
+</div>
+
+<style is:global>
+	.spyglass-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 60; /* above the fixed header (z-20) and bottle (40), below the Kraken (9999) */
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: clamp(1rem, 12vh, 7rem) 1rem 1rem;
+	}
+
+	.spyglass-overlay[hidden] {
+		display: none;
+	}
+
+	.spyglass-backdrop {
+		position: absolute;
+		inset: 0;
+		background: oklch(0.15 0.03 252 / 0.55);
+		backdrop-filter: blur(3px);
+		-webkit-backdrop-filter: blur(3px);
+	}
+
+	.spyglass-dialog {
+		position: relative;
+		width: min(38rem, 100%);
+		max-height: min(70vh, 34rem);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--popover);
+		color: var(--popover-foreground);
+		box-shadow: 0 24px 64px oklch(0.15 0.04 252 / 0.45);
+		animation: spyglass-pop 160ms ease-out both;
+	}
+
+	.spyglass-input-row {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		padding: 0.85rem 1rem;
+		border-bottom: 1px solid var(--border);
+	}
+
+	.spyglass-input-icon {
+		width: 1.25rem;
+		height: 1.25rem;
+		flex-shrink: 0;
+		color: var(--primary);
+	}
+
+	.spyglass-input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		outline: none;
+		background: transparent;
+		color: var(--popover-foreground);
+		font-size: 1rem;
+		line-height: 1.4;
+	}
+
+	.spyglass-input::placeholder {
+		color: var(--muted-foreground);
+	}
+
+	.spyglass-close {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--muted-foreground);
+		cursor: pointer;
+		transition: background-color 140ms ease, color 140ms ease;
+	}
+
+	.spyglass-close:hover {
+		background: var(--accent);
+		color: var(--accent-foreground);
+	}
+
+	.spyglass-close:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px var(--ring);
+	}
+
+	.spyglass-kbd {
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.7rem;
+		letter-spacing: 0.05em;
+		text-transform: uppercase;
+	}
+
+	.spyglass-results {
+		margin: 0;
+		padding: 0.4rem;
+		list-style: none;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	.spyglass-option {
+		display: block;
+		padding: 0.6rem 0.75rem;
+		border-radius: var(--radius-md);
+		text-decoration: none;
+		color: inherit;
+		cursor: pointer;
+	}
+
+	.spyglass-option[aria-selected='true'],
+	.spyglass-option:hover {
+		background: var(--accent);
+		color: var(--accent-foreground);
+	}
+
+	.spyglass-option-title {
+		display: block;
+		font-family: var(--font-serif);
+		font-size: 0.95rem;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.spyglass-option-desc {
+		display: block;
+		margin-top: 0.15rem;
+		font-size: 0.82rem;
+		line-height: 1.4;
+		color: var(--muted-foreground);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.spyglass-option[aria-selected='true'] .spyglass-option-desc,
+	.spyglass-option:hover .spyglass-option-desc {
+		color: inherit;
+		opacity: 0.8;
+	}
+
+	.spyglass-option-date {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--muted-foreground);
+	}
+
+	.spyglass-option[aria-selected='true'] .spyglass-option-date,
+	.spyglass-option:hover .spyglass-option-date {
+		color: inherit;
+		opacity: 0.7;
+	}
+
+	.spyglass-empty {
+		padding: 2rem 1.25rem 2.25rem;
+		text-align: center;
+	}
+
+	.spyglass-empty-title {
+		margin: 0 0 0.35rem;
+		font-family: var(--font-serif);
+		font-size: 1.05rem;
+		font-weight: 600;
+		color: var(--popover-foreground);
+	}
+
+	.spyglass-empty-sub {
+		margin: 0;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: var(--muted-foreground);
+	}
+
+	.spyglass-sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	@keyframes spyglass-pop {
+		from { opacity: 0; transform: scale(0.97) translateY(-8px); }
+		to { opacity: 1; transform: scale(1) translateY(0); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.spyglass-dialog { animation: none; }
+		.spyglass-backdrop { backdrop-filter: none; -webkit-backdrop-filter: none; }
+	}
+</style>
+
+<script is:inline>
+	// Bind once and delegate from document so the overlay survives Astro
+	// ClientRouter swaps and Tina re-renders (same convention as
+	// ThemeToggle.astro / MessageInABottle.astro). All element lookups happen
+	// at call time by id, so freshly swapped-in DOM keeps working.
+	if (!window.__spyglassBound) {
+		window.__spyglassBound = true;
+
+		var spyglassActiveIndex = -1;
+		var spyglassResultCount = 0;
+		var spyglassLastFocus = null;
+		var spyglassQuerySeq = 0;
+
+		function spyglassEls() {
+			return {
+				overlay: document.getElementById('spyglass-overlay'),
+				input: document.getElementById('spyglass-input'),
+				results: document.getElementById('spyglass-results'),
+				status: document.getElementById('spyglass-status'),
+				close: document.getElementById('spyglass-close'),
+			};
+		}
+
+		function spyglassIsOpen() {
+			var overlay = document.getElementById('spyglass-overlay');
+			return !!overlay && !overlay.hidden;
+		}
+
+		// Fetch the build-time index once and memoise the promise on window so
+		// repeat opens — and every page after a ClientRouter swap — reuse it.
+		function spyglassLoadIndex() {
+			if (!window.__spyglassIndexPromise) {
+				window.__spyglassIndexPromise = fetch('/search-index.json')
+					.then(function (res) {
+						if (!res.ok) throw new Error('search index HTTP ' + res.status);
+						return res.json();
+					})
+					.catch(function (err) {
+						// Clear the memo so a later open can retry after a transient failure.
+						window.__spyglassIndexPromise = null;
+						throw err;
+					});
+			}
+			return window.__spyglassIndexPromise;
+		}
+
+		// Case-insensitive substring scoring: title hits outrank description
+		// hits, earlier hits outrank later ones. -1 = no match.
+		function spyglassScore(post, q) {
+			var t = (post.title || '').toLowerCase();
+			var d = (post.description || '').toLowerCase();
+			var ti = t.indexOf(q);
+			var di = d.indexOf(q);
+			if (ti < 0 && di < 0) return -1;
+			var s = 0;
+			if (ti === 0) s += 300;
+			else if (ti > 0) s += 200 - Math.min(ti, 100);
+			if (di === 0) s += 80;
+			else if (di > 0) s += 50 - Math.min(di, 40);
+			return s;
+		}
+
+		function spyglassMatches(posts, query) {
+			var q = query.trim().toLowerCase();
+			if (!q) return posts.slice(); // empty query: full chart, newest first (index order)
+			return posts
+				.map(function (post) { return { post: post, score: spyglassScore(post, q) }; })
+				.filter(function (m) { return m.score >= 0; })
+				.sort(function (a, b) {
+					if (b.score !== a.score) return b.score - a.score;
+					var ad = a.post.date ? new Date(a.post.date).valueOf() : 0;
+					var bd = b.post.date ? new Date(b.post.date).valueOf() : 0;
+					return bd - ad;
+				})
+				.map(function (m) { return m.post; });
+		}
+
+		function spyglassSetActive(index) {
+			var e = spyglassEls();
+			if (!e.results || !e.input) return;
+			var options = e.results.querySelectorAll('.spyglass-option');
+			if (!options.length) {
+				spyglassActiveIndex = -1;
+				e.input.removeAttribute('aria-activedescendant');
+				return;
+			}
+			spyglassActiveIndex = (index + options.length) % options.length;
+			options.forEach(function (opt, i) {
+				var on = i === spyglassActiveIndex;
+				opt.setAttribute('aria-selected', on ? 'true' : 'false');
+				if (on) {
+					e.input.setAttribute('aria-activedescendant', opt.id);
+					if (opt.scrollIntoView) opt.scrollIntoView({ block: 'nearest' });
+				}
+			});
+		}
+
+		function spyglassRenderList(posts, query) {
+			var e = spyglassEls();
+			if (!e.results) return;
+			e.results.textContent = '';
+			spyglassResultCount = posts.length;
+
+			if (!posts.length) {
+				var empty = document.createElement('li');
+				empty.className = 'spyglass-empty';
+				empty.setAttribute('role', 'presentation');
+				var title = document.createElement('p');
+				title.className = 'spyglass-empty-title';
+				title.textContent = "Nothing on the horizon, cap'n.";
+				var sub = document.createElement('p');
+				sub.className = 'spyglass-empty-sub';
+				sub.textContent =
+					'Not a sail, not a barrel o’ grog matching “' + query.trim() +
+					'”. Trim yer bearing and scan the seas again.';
+				empty.appendChild(title);
+				empty.appendChild(sub);
+				e.results.appendChild(empty);
+				if (e.status) e.status.textContent = 'No posts found for ' + query.trim();
+				spyglassSetActive(-1);
+				spyglassActiveIndex = -1;
+				return;
+			}
+
+			posts.forEach(function (post, i) {
+				var li = document.createElement('li');
+				li.setAttribute('role', 'presentation');
+				var a = document.createElement('a');
+				a.className = 'spyglass-option';
+				a.id = 'spyglass-option-' + i;
+				a.href = post.url;
+				a.setAttribute('role', 'option');
+				a.setAttribute('aria-selected', 'false');
+				a.tabIndex = -1; // focus stays on the input; aria-activedescendant tracks selection
+
+				var titleEl = document.createElement('span');
+				titleEl.className = 'spyglass-option-title';
+				titleEl.textContent = post.title || 'Untitled';
+				a.appendChild(titleEl);
+
+				if (post.description) {
+					var desc = document.createElement('span');
+					desc.className = 'spyglass-option-desc';
+					desc.textContent = post.description;
+					a.appendChild(desc);
+				}
+
+				if (post.date) {
+					var when = new Date(post.date);
+					if (!isNaN(when.valueOf())) {
+						var dateEl = document.createElement('span');
+						dateEl.className = 'spyglass-option-date';
+						dateEl.textContent = when.toLocaleDateString('en-US', {
+							year: 'numeric', month: 'short', day: 'numeric',
+						});
+						a.appendChild(dateEl);
+					}
+				}
+
+				li.appendChild(a);
+				e.results.appendChild(li);
+			});
+
+			if (e.status) {
+				e.status.textContent = spyglassResultCount + (spyglassResultCount === 1 ? ' post' : ' posts') + ' sighted';
+			}
+			spyglassSetActive(0);
+		}
+
+		function spyglassRender(query) {
+			var seq = ++spyglassQuerySeq;
+			var e = spyglassEls();
+			spyglassLoadIndex().then(
+				function (posts) {
+					if (seq !== spyglassQuerySeq || !spyglassIsOpen()) return; // stale keystroke or closed
+					spyglassRenderList(spyglassMatches(posts, query), query);
+				},
+				function () {
+					if (seq !== spyglassQuerySeq || !spyglassIsOpen()) return;
+					var el = spyglassEls();
+					if (!el.results) return;
+					el.results.textContent = '';
+					var empty = document.createElement('li');
+					empty.className = 'spyglass-empty';
+					empty.setAttribute('role', 'presentation');
+					var title = document.createElement('p');
+					title.className = 'spyglass-empty-title';
+					title.textContent = 'The spyglass has fogged up.';
+					var sub = document.createElement('p');
+					sub.className = 'spyglass-empty-sub';
+					sub.textContent = 'The chart could not be fetched — check yer connection and try again, sailor.';
+					empty.appendChild(title);
+					empty.appendChild(sub);
+					el.results.appendChild(empty);
+					if (el.status) el.status.textContent = 'Search index failed to load';
+					spyglassResultCount = 0;
+					spyglassActiveIndex = -1;
+				}
+			);
+		}
+
+		function spyglassOpen() {
+			var e = spyglassEls();
+			if (!e.overlay || !e.input || spyglassIsOpen()) return;
+			spyglassLastFocus = document.activeElement;
+			e.overlay.hidden = false;
+			document.documentElement.style.overflow = 'hidden'; // lock scroll behind the modal
+			e.input.value = '';
+			spyglassRender('');
+			e.input.focus();
+		}
+
+		function spyglassClose(restoreFocus) {
+			var e = spyglassEls();
+			if (!e.overlay || e.overlay.hidden) return;
+			e.overlay.hidden = true;
+			document.documentElement.style.overflow = '';
+			if (restoreFocus !== false && spyglassLastFocus && document.contains(spyglassLastFocus)) {
+				try { spyglassLastFocus.focus(); } catch (err) {}
+			}
+			spyglassLastFocus = null;
+		}
+
+		function spyglassIsTypingTarget(target) {
+			if (!target || !target.closest) return false;
+			if (target.isContentEditable) return true;
+			return !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+		}
+
+		document.addEventListener('click', function (ev) {
+			var t = ev.target;
+			if (!t || !t.closest) return;
+			if (t.closest('[data-spyglass-open]')) {
+				ev.preventDefault();
+				spyglassOpen();
+				return;
+			}
+			if (!spyglassIsOpen()) return;
+			if (t.closest('#spyglass-close')) {
+				spyglassClose(true);
+				return;
+			}
+			// Clicking a result is a plain anchor navigation; just close without
+			// stealing focus so the browser can leave.
+			if (t.closest('.spyglass-option')) {
+				spyglassClose(false);
+				return;
+			}
+			// Click on the backdrop (anywhere outside the dialog) closes.
+			if (!t.closest('#spyglass-dialog')) {
+				spyglassClose(true);
+			}
+		});
+
+		document.addEventListener('keydown', function (ev) {
+			var e;
+			if (!spyglassIsOpen()) {
+				// `/` outside inputs opens the spyglass.
+				if (
+					ev.key === '/' &&
+					!ev.ctrlKey && !ev.metaKey && !ev.altKey &&
+					!ev.defaultPrevented &&
+					!spyglassIsTypingTarget(ev.target)
+				) {
+					ev.preventDefault();
+					spyglassOpen();
+				}
+				return;
+			}
+
+			if (ev.key === 'Escape') {
+				ev.preventDefault();
+				spyglassClose(true);
+				return;
+			}
+
+			if (ev.key === 'Tab') {
+				// Trap focus between the input and the close button.
+				e = spyglassEls();
+				if (!e.input || !e.close) return;
+				ev.preventDefault();
+				var onInput = document.activeElement === e.input;
+				(onInput ? e.close : e.input).focus();
+				return;
+			}
+
+			if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+				ev.preventDefault();
+				if (spyglassResultCount > 0) {
+					spyglassSetActive(spyglassActiveIndex + (ev.key === 'ArrowDown' ? 1 : -1));
+				}
+				return;
+			}
+
+			if (ev.key === 'Enter') {
+				e = spyglassEls();
+				if (!e.results) return;
+				var options = e.results.querySelectorAll('.spyglass-option');
+				if (!options.length) return;
+				ev.preventDefault();
+				var target = options[spyglassActiveIndex >= 0 ? spyglassActiveIndex : 0];
+				if (target && target.href) {
+					spyglassClose(false);
+					window.location.assign(target.href);
+				}
+			}
+		});
+
+		document.addEventListener('input', function (ev) {
+			if (ev.target && ev.target.id === 'spyglass-input' && spyglassIsOpen()) {
+				spyglassRender(ev.target.value);
+			}
+		});
+
+		// Close before a ClientRouter swap so the incoming page starts clean;
+		// the scroll lock is cleared here too (the <html> element persists).
+		document.addEventListener('astro:before-swap', function () {
+			spyglassClose(false);
+		});
+	}
+</script>
