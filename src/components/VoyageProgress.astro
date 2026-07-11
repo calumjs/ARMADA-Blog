@@ -1,0 +1,204 @@
+---
+// VoyageProgress — a "voyage" reading-progress bar for blog posts.
+//
+// A slim rope track fixed to the very top of the viewport with a tiny ship
+// that sails from port (0%) to starboard (100%) as the reader scrolls through
+// the article body. Rendered ONLY by the BlogPost layout, so it never appears
+// on non-post pages; the delegated script below no-ops when the markup is
+// absent after a ClientRouter swap to another page.
+//
+// Progress is measured against the article body (the `.prose` block rendered
+// by BlogBody): 0% when the top of the article reaches the top of the
+// viewport, 100% when its end scrolls into view. Falls back to whole-document
+// progress if no `.prose` block exists (e.g. a post without a body).
+//
+// Theming: every colour comes from the existing CSS variables (--border,
+// --primary, --background), so the bar reads correctly in all five themes
+// (light / dark / storm / tropical / abyss). Purely client-side — no
+// dependencies, no network.
+//
+// Accessibility: the track is a native role="progressbar" with a live
+// aria-valuenow. Under prefers-reduced-motion the bobbing ship marker is
+// hidden entirely and a plain progress fill takes its place.
+//
+// The scroll/resize listeners are bound once to window/document and guarded by
+// a window flag so they survive Astro ClientRouter swaps and Tina re-renders
+// (same convention as KrakenEasterEgg.astro / MessageInABottle.astro).
+---
+
+<div
+	id="voyage-progress"
+	class="voyage-progress"
+	role="progressbar"
+	aria-label="Reading progress"
+	aria-valuemin="0"
+	aria-valuemax="100"
+	aria-valuenow="0"
+>
+	<div class="voyage-track" aria-hidden="true"></div>
+	<div id="voyage-fill" class="voyage-fill" aria-hidden="true"></div>
+	<div id="voyage-ship" class="voyage-ship" aria-hidden="true">
+		<!-- Tiny side-view sloop, drawn in the theme's primary colour. -->
+		<svg viewBox="0 0 24 16" width="22" height="15" focusable="false">
+			<!-- Mainsail -->
+			<path d="M11 1 L11 10 L3.5 10 Z" fill="currentColor" fill-opacity="0.9" />
+			<!-- Jib -->
+			<path d="M13 3 L13 10 L19 10 Z" fill="currentColor" fill-opacity="0.55" />
+			<!-- Mast -->
+			<rect x="11" y="1" width="1.2" height="9.5" rx="0.6" fill="currentColor" />
+			<!-- Hull -->
+			<path d="M2 11 h20 l-3.5 4 h-13 Z" fill="currentColor" />
+		</svg>
+	</div>
+</div>
+
+<style>
+	.voyage-progress {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 1.25rem; /* room for the ship; the visible track is far slimmer */
+		z-index: 30; /* above the fixed header (z-20), below the bottle (40) & Kraken (9999) */
+		pointer-events: none;
+	}
+
+	/* The rope: a slim twisted-strand track drawn from the theme border colour. */
+	.voyage-track {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 4px;
+		background: repeating-linear-gradient(
+			-55deg,
+			var(--border) 0px,
+			var(--border) 3px,
+			transparent 3px,
+			transparent 6px
+		);
+		background-color: color-mix(in oklch, var(--border) 45%, transparent);
+	}
+
+	/* Sailed water behind the ship — doubles as the plain fill for reduced motion. */
+	.voyage-fill {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 0%;
+		height: 4px;
+		background: var(--primary);
+		box-shadow: 0 0 6px color-mix(in oklch, var(--primary) 55%, transparent);
+	}
+
+	.voyage-ship {
+		position: absolute;
+		top: 1px;
+		left: 0%;
+		transform: translateX(-50%);
+		color: var(--primary);
+		line-height: 0;
+		/* A whisper of backdrop so the ship stays legible over the header blur. */
+		filter: drop-shadow(0 1px 2px color-mix(in oklch, var(--background) 80%, transparent));
+	}
+
+	.voyage-ship svg {
+		display: block;
+		animation: voyage-bob 3.2s ease-in-out infinite;
+	}
+
+	@keyframes voyage-bob {
+		0%,
+		100% {
+			transform: translateY(0) rotate(-2deg);
+		}
+		50% {
+			transform: translateY(-1.5px) rotate(2deg);
+		}
+	}
+
+	/* Reduced motion: no bobbing ship — just a plain progress fill on the track. */
+	@media (prefers-reduced-motion: reduce) {
+		.voyage-ship {
+			display: none;
+		}
+
+		.voyage-ship svg {
+			animation: none;
+		}
+	}
+</style>
+
+<script is:inline>
+	// Bind once to window/document so the voyage bar survives Astro ClientRouter
+	// swaps and Tina re-renders (same convention as KrakenEasterEgg.astro).
+	// Every callback re-queries the DOM and no-ops when the bar isn't present
+	// (i.e. after navigating to a non-post page).
+	if (!window.__voyageProgressBound) {
+		window.__voyageProgressBound = true;
+
+		var voyageRaf = 0;
+		var voyageLastPct = -1;
+
+		function voyageUpdate() {
+			voyageRaf = 0;
+			var root = document.getElementById('voyage-progress');
+			if (!root) return; // not a blog post page
+
+			var fill = document.getElementById('voyage-fill');
+			var ship = document.getElementById('voyage-ship');
+			var scroller = document.scrollingElement || document.documentElement;
+			var y = window.scrollY;
+			var vh = window.innerHeight;
+
+			var article = document.querySelector('.prose');
+			var start;
+			var end;
+			if (article) {
+				var top = article.getBoundingClientRect().top + y;
+				start = top; // 0% — article top reaches the top of the viewport
+				end = top + article.scrollHeight - vh; // 100% — end of content in view
+			} else {
+				start = 0;
+				end = scroller.scrollHeight - vh;
+			}
+
+			var pct;
+			if (end <= start) {
+				// Article fits inside the viewport — the voyage is already complete.
+				pct = 100;
+			} else {
+				pct = ((y - start) / (end - start)) * 100;
+				pct = Math.max(0, Math.min(100, pct));
+			}
+
+			var rounded = Math.round(pct * 10) / 10;
+			if (rounded === voyageLastPct) return;
+			voyageLastPct = rounded;
+
+			if (fill) fill.style.width = pct + '%';
+			if (ship) ship.style.left = pct + '%';
+			root.setAttribute('aria-valuenow', String(Math.round(pct)));
+		}
+
+		function voyageSchedule() {
+			if (voyageRaf) return;
+			voyageRaf = window.requestAnimationFrame(voyageUpdate);
+		}
+
+		window.addEventListener('scroll', voyageSchedule, { passive: true });
+		window.addEventListener('resize', voyageSchedule, { passive: true });
+
+		// Initial paint on first load AND after every ClientRouter swap, once the
+		// new page's DOM is in place. Reset the memo so the fresh bar always paints.
+		document.addEventListener('astro:page-load', function () {
+			voyageLastPct = -1;
+			voyageSchedule();
+		});
+		document.addEventListener('astro:after-swap', function () {
+			voyageLastPct = -1;
+			voyageSchedule();
+		});
+		voyageSchedule();
+	}
+</script>
