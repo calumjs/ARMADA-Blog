@@ -1,0 +1,311 @@
+---
+// DropAnchor — "drop anchor" heading anchor links on blog posts (#209).
+//
+// Every h2/h3 in a post body (the `.prose` block rendered by BlogBody) gets a
+// stable slug id derived from its text (GitHub-style: lowercase, punctuation
+// stripped, spaces → hyphens, deduped with -1/-2 suffixes) and a small ⚓
+// button in the left gutter. The button is revealed on heading hover AND on
+// keyboard focus (opacity-only, so it stays tab-focusable — never
+// hover-only); clicking it copies the absolute canonical URL#fragment via
+// navigator.clipboard.writeText and flashes a brief "Anchored! ⚓" toast.
+// No canvas, no network, no dependencies.
+//
+// The ids/buttons are attached client-side because the body is rendered by
+// TinaMarkdown, which emits bare <h2>/<h3> with no ids — Astro's default
+// markdown heading ids never apply here. The slug function is deterministic
+// over the heading text, so the fragments are stable across builds.
+//
+// Rendered ONLY by the BlogPost layout, so it exists on post body pages
+// alone; the delegated script no-ops when no `.prose` headings are present
+// after a ClientRouter swap. Listeners are bound once to document/window and
+// guarded by a window flag so they survive Astro ClientRouter swaps and Tina
+// re-renders (same convention as PlunderCode.astro / CarvePlank.astro).
+//
+// Behaviour notes:
+// - Attaches on first load, on astro:page-load AND astro:after-swap, and
+//   after Tina visual-editor re-renders (a rAF-debounced MutationObserver
+//   re-runs the idempotent attach). Each heading is armed at most once and
+//   pre-existing ids are respected, never overwritten.
+// - The button is absolutely positioned in the heading's left gutter and
+//   user-select:none, so there is NO layout shift and the heading text stays
+//   cleanly selectable/copyable.
+// - Every colour comes from the theme CSS variables, so it reads correctly
+//   in all five themes (light / dark / storm / tropical / abyss).
+// - Degrades silently when the clipboard API is unavailable (e.g. insecure
+//   context): ids are still assigned (fragment links keep working) but no
+//   buttons are attached.
+// - Hidden in print.
+
+interface Props {
+	/** Absolute canonical URL of the post (same source as CarvePlank). */
+	url: string;
+}
+
+const { url } = Astro.props;
+---
+
+<div id="drop-anchor" data-anchor-url={url}>
+	<div id="drop-anchor-toast" hidden>Anchored! ⚓</div>
+	<!-- Announces the copy confirmation to screen readers without moving focus. -->
+	<span id="drop-anchor-status" class="sr-only" role="status" aria-live="polite"
+	></span>
+</div>
+
+<style is:global>
+	/* Global (not scoped) because the heading class + button are created by
+	   the script below, so Astro's scoped-style attributes would never match. */
+
+	/* Fragment jumps land clear of the fixed header (body padding-top: 5rem)
+	   and the voyage progress bar. */
+	.prose :is(h2, h3) {
+		scroll-margin-top: 6.5rem;
+	}
+
+	.anchor-heading {
+		position: relative;
+	}
+
+	.anchor-btn {
+		position: absolute;
+		/* Sits in the left gutter: inside the container's px-6 padding on
+		   narrow screens, in the page margin on wide ones. Absolute, so it
+		   never shifts the heading text. */
+		left: -1.5em;
+		top: 0.35em;
+		padding: 0;
+		border: 0;
+		background: none;
+		color: var(--muted-foreground);
+		font-size: 0.7em;
+		line-height: 1;
+		cursor: pointer;
+		user-select: none;
+		-webkit-user-select: none;
+		border-radius: var(--radius-sm);
+		/* Revealed via opacity only so it remains keyboard-focusable while
+		   hidden — never display:none / visibility:hidden. */
+		opacity: 0;
+		transition: opacity 120ms ease, color 120ms ease;
+	}
+
+	.anchor-heading:hover .anchor-btn,
+	.anchor-btn:focus-visible {
+		opacity: 1;
+	}
+
+	.anchor-btn:hover {
+		color: var(--primary);
+	}
+
+	.anchor-btn:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+		color: var(--primary);
+	}
+
+	/* No hover on touch devices — keep a faint always-on affordance instead. */
+	@media (hover: none) {
+		.anchor-btn {
+			opacity: 0.55;
+		}
+	}
+
+	#drop-anchor-toast {
+		position: fixed;
+		left: 50%;
+		bottom: 2rem;
+		transform: translateX(-50%);
+		/* Above the fixed header (z-20) and voyage bar (z-30), same band as
+		   the carve plank (60); the Kraken overlay (9999) still wins. */
+		z-index: 60;
+		padding: 0.45rem 0.9rem;
+		border-radius: var(--radius-md);
+		border: 1px solid var(--border);
+		background: color-mix(in oklch, var(--background) 88%, var(--foreground));
+		color: var(--foreground);
+		font-size: 0.8125rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
+		white-space: nowrap;
+		pointer-events: none;
+		box-shadow: 0 3px 10px color-mix(in oklch, var(--foreground) 20%, transparent);
+	}
+
+	#drop-anchor-toast[hidden] {
+		display: none;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.anchor-btn {
+			transition: none;
+		}
+	}
+
+	@media print {
+		.anchor-btn,
+		#drop-anchor-toast {
+			display: none !important;
+		}
+	}
+</style>
+
+<style>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>
+
+<script is:inline>
+	// Bind once to document/window so the anchors survive Astro ClientRouter
+	// swaps and Tina re-renders (same convention as PlunderCode.astro).
+	// Every callback re-queries the DOM and no-ops on non-post pages.
+	if (!window.__dropAnchorBound) {
+		window.__dropAnchorBound = true;
+
+		var ANCHOR_FLASH_MS = 1400;
+		var anchorRaf = 0;
+		var anchorToastTimer = 0;
+
+		function anchorClipboardOk() {
+			return !!(navigator.clipboard && navigator.clipboard.writeText);
+		}
+
+		// GitHub-style slug: lowercase, strip punctuation, spaces → hyphens.
+		// Deterministic over the heading text, so fragments are stable.
+		function anchorSlug(text) {
+			var slug = (text || '')
+				.toLowerCase()
+				.trim()
+				.replace(/[^\p{L}\p{N}\s-]/gu, '')
+				.replace(/\s+/g, '-')
+				.replace(/-+/g, '-')
+				.replace(/^-|-$/g, '');
+			return slug || 'section';
+		}
+
+		// Idempotent: gives each post-body h2/h3 a stable slug id (respecting
+		// any pre-existing id) and pins one ⚓ button to it. Safe to call
+		// repeatedly (load, swaps, Tina re-renders).
+		function anchorAttach() {
+			var heads = document.querySelectorAll('.prose h2, .prose h3');
+			if (!heads.length) return; // not a blog post page
+
+			for (var i = 0; i < heads.length; i++) {
+				var h = heads[i];
+				if (h.querySelector('.anchor-btn')) continue; // already armed
+
+				if (!h.id) {
+					var base = anchorSlug(h.textContent);
+					var id = base;
+					var n = 1;
+					while (document.getElementById(id)) {
+						id = base + '-' + n++;
+					}
+					h.id = id;
+				}
+				h.classList.add('anchor-heading');
+
+				// No clipboard API (e.g. insecure context) — keep the ids (the
+				// fragments still work) but degrade silently with no buttons.
+				if (!anchorClipboardOk()) continue;
+
+				var btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'anchor-btn';
+				btn.setAttribute(
+					'aria-label',
+					'Drop anchor — copy link to "' +
+						(h.textContent || '').trim() +
+						'"'
+				);
+				btn.textContent = '⚓';
+				h.appendChild(btn);
+			}
+		}
+
+		function anchorSchedule() {
+			if (anchorRaf) return;
+			anchorRaf = window.requestAnimationFrame(function () {
+				anchorRaf = 0;
+				anchorAttach();
+			});
+		}
+
+		function anchorToast() {
+			var toast = document.getElementById('drop-anchor-toast');
+			var status = document.getElementById('drop-anchor-status');
+			if (toast) toast.hidden = false;
+			if (status) status.textContent = 'Heading link copied to clipboard';
+			if (anchorToastTimer) clearTimeout(anchorToastTimer);
+			anchorToastTimer = window.setTimeout(function () {
+				anchorToastTimer = 0;
+				var t = document.getElementById('drop-anchor-toast');
+				var s = document.getElementById('drop-anchor-status');
+				if (t) t.hidden = true;
+				if (s) s.textContent = '';
+			}, ANCHOR_FLASH_MS);
+		}
+
+		// Delegated so clicks keep working on buttons attached after swaps.
+		document.addEventListener('click', function (e) {
+			var t = e.target;
+			var btn = t && t.closest ? t.closest('.anchor-btn') : null;
+			if (!btn) return;
+
+			var head = btn.closest('h2, h3');
+			if (!head || !head.id || !anchorClipboardOk()) return;
+
+			// Absolute canonical post URL (same source as CarvePlank), falling
+			// back to the current location; either way the hash is replaced.
+			var root = document.getElementById('drop-anchor');
+			var base =
+				(root && root.getAttribute('data-anchor-url')) ||
+				location.origin + location.pathname;
+			var link = base.split('#')[0] + '#' + head.id;
+
+			navigator.clipboard.writeText(link).then(
+				function () {
+					anchorToast();
+				},
+				function () {
+					// Clipboard permission refused — degrade silently.
+				}
+			);
+		});
+
+		// Attach on first load AND after every ClientRouter swap, once the new
+		// page's DOM is in place. anchorAttach is idempotent, so re-entering a
+		// post never duplicates buttons or rewrites ids.
+		document.addEventListener('astro:page-load', anchorSchedule);
+		document.addEventListener('astro:after-swap', anchorSchedule);
+
+		// Retire any visible toast before the page swaps away.
+		document.addEventListener('astro:before-swap', function () {
+			if (anchorToastTimer) {
+				clearTimeout(anchorToastTimer);
+				anchorToastTimer = 0;
+			}
+			var toast = document.getElementById('drop-anchor-toast');
+			if (toast) toast.hidden = true;
+		});
+
+		// Tina's visual editor re-renders the post body in place (no swap
+		// event) — a debounced observer re-arms fresh headings. Observing the
+		// root element (not <body>) keeps it alive across body swaps; the
+		// idempotent attach means our own insertions settle immediately.
+		new MutationObserver(anchorSchedule).observe(document.documentElement, {
+			childList: true,
+			subtree: true,
+		});
+
+		anchorSchedule();
+	}
+</script>
