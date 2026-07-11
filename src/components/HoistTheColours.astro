@@ -186,12 +186,15 @@
 		}
 
 		function hoist() {
+			// Always reset the sequence — even when the egg can't fire again this
+			// page. Otherwise pos sticks past the end of HOIST_KONAMI and the
+			// keydown matcher reads .length of undefined on every later keypress.
+			pos = 0;
 			if (shown || firedThisPage) return;
 			var el = scene();
 			if (!el) return;
 			shown = true;
 			firedThisPage = true;
-			pos = 0;
 			el.hidden = false;
 			if (!prefersReducedMotion()) {
 				// Burst when the flag reaches the masthead (matches the CSS timing).
