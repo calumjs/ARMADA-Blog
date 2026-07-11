@@ -42,6 +42,7 @@ export async function listBlogs() {
 }
 
 export type CmsConfig = Awaited<ReturnType<typeof getConfig>>['data']['config'];
+export type CmsBlogListItem = Awaited<ReturnType<typeof listBlogs>>[number];
 export type CmsPage = Awaited<ReturnType<typeof getPage>>['data']['page'];
 export type CmsBlog = Awaited<ReturnType<typeof getBlog>>['data']['blog'];
 

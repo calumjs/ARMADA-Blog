@@ -1,0 +1,65 @@
+---
+/**
+ * "Nearby islands" — up to 3 related posts at the end of a blog post.
+ *
+ * Selection happens at build time in `src/lib/related-posts.ts` (shared tags
+ * desc, then pubDate desc, never the current post); this component only
+ * renders whatever it is given and renders nothing at all when the list is
+ * empty. Cards reuse the blog-index card language (border/bg-card/shadow) and
+ * the reading-time badge, styled purely with semantic theme tokens so they
+ * stay legible in all five themes. Each card is a single anchor, so it is
+ * keyboard-focusable with a visible focus ring.
+ */
+import { Icon } from 'astro-icon/components';
+import FormattedDate from './FormattedDate.astro';
+import ReadingTime from './ReadingTime.astro';
+import { readingTimeMinutes } from '../lib/reading-time';
+import type { CmsBlogListItem } from '../lib/data';
+
+interface Props {
+	posts: CmsBlogListItem[];
+}
+
+const { posts } = Astro.props;
+---
+
+{
+	posts.length > 0 && (
+		<aside aria-labelledby="nearby-islands-heading" class="mx-auto max-w-4xl px-6 pb-16 print:hidden">
+			<h2
+				id="nearby-islands-heading"
+				class="mb-6 flex items-center gap-2 text-2xl font-semibold tracking-tight"
+			>
+				<Icon name="tabler:map-2" size={24} aria-hidden="true" class="text-primary" />
+				Nearby islands
+			</h2>
+			<ul class="grid list-none gap-6 p-0 sm:grid-cols-2 lg:grid-cols-3">
+				{posts.map((post) => (
+					<li>
+						<a
+							href={`/blog/${post._sys.filename}/`}
+							class="group flex h-full flex-col rounded-xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+						>
+							<h3 class="font-semibold text-card-foreground group-hover:underline">
+								{post.title}
+							</h3>
+							{post.description && (
+								<p class="mt-1.5 line-clamp-2 text-sm text-muted-foreground">
+									{post.description}
+								</p>
+							)}
+							<div class="mt-auto flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-4">
+								{post.pubDate && (
+									<span class="text-sm text-muted-foreground">
+										<FormattedDate date={new Date(post.pubDate)} />
+									</span>
+								)}
+								<ReadingTime minutes={readingTimeMinutes(post.body)} />
+							</div>
+						</a>
+					</li>
+				))}
+			</ul>
+		</aside>
+	)
+}
