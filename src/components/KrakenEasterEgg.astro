@@ -1,7 +1,7 @@
 ---
 // KrakenEasterEgg — a hidden "Release the Kraken" flourish.
 //
-// A secret key trigger (the Konami code, OR typing the word "kraken") summons a
+// A secret key trigger (typing the word "kraken") summons a
 // dismissible animated kraken: inline SVG tentacles rising over the viewport with
 // CSS @keyframes. Purely decorative & client-side — no backend, no audio. The
 // overlay is SSR'd hidden (display:none via [hidden]) so there's no layout shift to
@@ -12,6 +12,9 @@
 // ThemeToggle.astro). It ignores keystrokes while focus is in a form field
 // (<input>/<textarea>/[contenteditable]) and fires its full animation once per page
 // session. Styling uses the maritime theme tokens from global.css.
+//
+// Note: the Konami code belongs to HoistTheColours.astro (#191) — this egg
+// deliberately only answers to the typed word so the two never collide.
 ---
 
 <div
@@ -200,15 +203,9 @@
 	if (!window.__krakenBound) {
 		window.__krakenBound = true;
 
-		// Konami: up up down down left right left right b a
-		var KONAMI = [
-			'ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown',
-			'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight',
-			'b', 'a',
-		];
+		// Secret word trigger. (The Konami code is owned by HoistTheColours.astro.)
 		var WORD = 'kraken';
 
-		var konamiPos = 0;
 		var wordBuf = '';
 		var active = false;
 
@@ -229,7 +226,6 @@
 			var el = overlay();
 			if (!el) return;
 			active = true;
-			konamiPos = 0;
 			wordBuf = '';
 			el.hidden = false;
 			// Restart the entrance animation if it was shown before this swap.
@@ -248,16 +244,6 @@
 
 			if (active) {
 				if (e.key === 'Escape') dismiss();
-				return;
-			}
-
-			// Konami sequence (case-insensitive on the b/a keys).
-			var expected = KONAMI[konamiPos];
-			var matches = e.key === expected
-				|| (expected.length === 1 && e.key.toLowerCase() === expected.toLowerCase());
-			konamiPos = matches ? konamiPos + 1 : (e.key === KONAMI[0] ? 1 : 0);
-			if (konamiPos >= KONAMI.length) {
-				release();
 				return;
 			}
 
