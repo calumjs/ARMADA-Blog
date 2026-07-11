@@ -248,6 +248,69 @@
 	box-shadow: 0 0 22px oklch(0.85 0.13 185 / 0.45);
 }
 
+/* Storm — "storm-glass sky glow" (#215). The storm theme's signature: three
+   large, soft radial cloud-glows that brighten and dim on very slow cycles,
+   like charge building in a storm glass. CSS-only and gated entirely on the
+   [data-theme='storm'] attribute selector, so it attaches/detaches live on
+   theme change with no JS and has zero effect on any other theme.
+
+   SAFETY (hard rule — nothing remotely strobe-like):
+   - Cycle times: layer 1 (::before, two glows) runs one full brighten→dim
+     cycle every 26s; layer 2 (::after, one glow) every 42s. That is at most
+     ~0.04 brightness transitions per second — hundreds of times slower than
+     the 3 flashes/second photosensitivity limit, and far beyond the issue's
+     >=8s-per-cycle floor.
+   - Amplitude is small: the glows peak at 10-16% alpha and only their layer
+     opacity eases between 0.55 and 1.0, so perceived luminance change is a
+     few percent of the page.
+   - Under prefers-reduced-motion the animation is fully disabled (it is only
+     ever applied inside a no-preference media query); the glows then hold a
+     single static frame, exactly like the abyss theme's static light wells.
+
+   Layering: `isolation: isolate` makes the storm body a stacking context, so
+   the fixed, pointer-events-none glow layers at z-index:-1 paint above the
+   body's background colour but beneath ALL content — text contrast is
+   untouched. Screen-only, so the print stylesheet (#212) never sees it. */
+@media screen {
+	[data-theme='storm'] body {
+		isolation: isolate;
+	}
+	[data-theme='storm'] body::before,
+	[data-theme='storm'] body::after {
+		content: '';
+		position: fixed;
+		inset: 0;
+		z-index: -1;
+		pointer-events: none;
+	}
+	/* Layer 1 — a cold squall-front bloom off the top-left horizon and a
+	   fainter charged-cyan glow mid-sky right. 26s cycle. */
+	[data-theme='storm'] body::before {
+		background-image:
+			radial-gradient(85rem 48rem at 18% -12%, oklch(0.62 0.10 235 / 0.16), transparent 62%),
+			radial-gradient(70rem 40rem at 88% 28%, oklch(0.80 0.13 210 / 0.10), transparent 60%);
+	}
+	/* Layer 2 — a broad steel-blue swell glow rising below the fold. 42s
+	   cycle, offset so the two layers drift in and out of phase. */
+	[data-theme='storm'] body::after {
+		background-image:
+			radial-gradient(95rem 52rem at 55% 115%, oklch(0.55 0.09 250 / 0.14), transparent 64%);
+	}
+}
+@keyframes storm-glass-glow {
+	0%, 100% { opacity: 0.55; }
+	50% { opacity: 1; }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+	[data-theme='storm'] body::before {
+		animation: storm-glass-glow 26s ease-in-out infinite;
+	}
+	[data-theme='storm'] body::after {
+		animation: storm-glass-glow 42s ease-in-out infinite;
+		animation-delay: -9s;
+	}
+}
+
 @layer base {
 	* {
 		border-color: var(--border);
