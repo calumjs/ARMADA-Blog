@@ -80,6 +80,24 @@
 			);
 		opacity: 0.78;
 	}
+	/* Abyss theme ("Davy Jones' Locker"): a near-black blue-green wash with a
+	   faint bioluminescent teal glow for the no-WebGL fallback. Mirrors the dark
+	   fallback's geometry exactly (same radial position/fade and the same 4-stop
+	   vertical gradient stops) so the hero stays aligned with the other themes —
+	   only the palette is swapped to the sunken-abyss depths (see #167/PR #169
+	   for the same alignment treatment on the tropical theme). */
+	:global([data-theme='abyss']) .ocean-hero__fallback {
+		background:
+			radial-gradient(120% 80% at 50% 8%, oklch(0.32 0.07 195 / 0.9), transparent 60%),
+			linear-gradient(
+				to bottom,
+				oklch(0.24 0.05 210) 0%,
+				oklch(0.20 0.045 212) 45%,
+				oklch(0.15 0.04 215) 58%,
+				oklch(0.11 0.03 218) 100%
+			);
+		opacity: 0.75;
+	}
 	.ocean-hero__canvas {
 		position: absolute;
 		inset: 0;

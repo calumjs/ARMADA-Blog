@@ -188,6 +188,66 @@
 	--chart-5: oklch(0.52 0.20 27);               /* coral red */
 }
 
+/* Abyss — "Davy Jones' Locker": the sunken deep. Near-black blue-green depths
+   lit only by bioluminescence — a jellyfish-teal primary and a violet accent
+   glowing out of the dark. Dark-derived (carries `.dark`). Foreground (L 0.93)
+   and muted foreground (L 0.78) against the L 0.15 base clear WCAG AA. */
+[data-theme='abyss'] {
+	--background: oklch(0.15 0.03 215);           /* near-black abyssal teal */
+	--foreground: oklch(0.93 0.03 190);           /* pale seafoam glow */
+	--card: oklch(0.19 0.038 218);                /* sunken hull */
+	--card-foreground: oklch(0.93 0.03 190);
+	--popover: oklch(0.19 0.038 218);
+	--popover-foreground: oklch(0.93 0.03 190);
+	--primary: oklch(0.85 0.13 185);              /* bioluminescent teal */
+	--primary-foreground: oklch(0.16 0.035 215);  /* abyss ink on glow */
+	--secondary: oklch(0.25 0.045 222);           /* deep current */
+	--secondary-foreground: oklch(0.93 0.03 190);
+	--muted: oklch(0.25 0.045 222);
+	--muted-foreground: oklch(0.78 0.05 190);     /* dim biolight */
+	--accent: oklch(0.34 0.09 300);               /* jellyfish violet */
+	--accent-foreground: oklch(0.95 0.02 190);
+	--destructive: oklch(0.68 0.19 22);           /* anglerfish red */
+	--border: oklch(0.85 0.09 185 / 14%);         /* glowing rule, low alpha */
+	--input: oklch(0.85 0.09 185 / 16%);
+	--ring: oklch(0.85 0.13 185);                 /* biolight focus ring */
+	--chart-1: oklch(0.85 0.13 185);              /* biolight teal */
+	--chart-2: oklch(0.72 0.15 300);              /* jellyfish violet */
+	--chart-3: oklch(0.70 0.09 230);              /* deep-water blue */
+	--chart-4: oklch(0.74 0.11 160);              /* algal green */
+	--chart-5: oklch(0.68 0.19 22);               /* anglerfish red */
+}
+
+/* Davy Jones' Locker — bioluminescent touches. CSS-only and fully static
+   (text-shadow / box-shadow / gradients, no animation), so it is inherently
+   safe under prefers-reduced-motion; only the pre-existing hover *transition*
+   applies, and transitions of this size are reduced-motion friendly. */
+[data-theme='abyss'] body {
+	/* Faint deep-sea light wells: a teal bloom sinking from the surface and a
+	   violet jellyfish drift below the fold, over the abyssal base colour. */
+	background-image:
+		radial-gradient(90rem 42rem at 22% -8%, oklch(0.42 0.09 195 / 0.14), transparent 65%),
+		radial-gradient(70rem 38rem at 85% 110%, oklch(0.45 0.12 300 / 0.12), transparent 62%);
+	background-attachment: fixed;
+}
+/* Links, and buttons carrying the primary token, luminesce softly — brighter
+   on hover/focus like a disturbed jelly. */
+[data-theme='abyss'] .prose a,
+[data-theme='abyss'] a.text-primary,
+[data-theme='abyss'] .text-primary {
+	text-shadow: 0 0 10px oklch(0.85 0.13 185 / 0.35);
+}
+[data-theme='abyss'] .prose a:hover,
+[data-theme='abyss'] a.text-primary:hover {
+	text-shadow: 0 0 14px oklch(0.85 0.13 185 / 0.6);
+}
+[data-theme='abyss'] .bg-primary {
+	box-shadow: 0 0 16px oklch(0.85 0.13 185 / 0.30);
+}
+[data-theme='abyss'] .bg-primary:hover {
+	box-shadow: 0 0 22px oklch(0.85 0.13 185 / 0.45);
+}
+
 @layer base {
 	* {
 		border-color: var(--border);

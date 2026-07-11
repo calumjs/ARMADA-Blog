@@ -10,6 +10,7 @@ const themes = [
 	{ id: 'dark', label: 'Night voyage', icon: 'tabler:moon' },
 	{ id: 'storm', label: 'Tempest watch', icon: 'tabler:bolt' },
 	{ id: 'tropical', label: 'Tropical lagoon', icon: 'tabler:sun-high' },
+	{ id: 'abyss', label: "Davy Jones' Locker", icon: 'tabler:anchor' },
 ];
 
 // SSR/no-JS fallback: with JS disabled the picker's active marker is set by the
@@ -64,6 +65,7 @@ const ssrDefaultTheme = 'light';
 			dark:     { dark: true,  attr: null },
 			storm:    { dark: true,  attr: 'storm' },
 			tropical: { dark: false, attr: 'tropical' },
+			abyss:    { dark: true,  attr: 'abyss' },
 		};
 
 		function current() {
