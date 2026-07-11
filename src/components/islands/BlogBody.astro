@@ -20,7 +20,9 @@ const minutes = data?.body ? readingTimeMinutes(data.body) : null;
 )}
 {data && (
 	<div class="mx-auto max-w-3xl px-6 py-12">
-		<div class="mb-8 text-center">
+		{/* print:hidden — in print the compact .print-post-meta line in the
+		    BlogPost layout carries the title/date/reading time instead. */}
+		<div class="mb-8 text-center print:hidden">
 			{data.pubDate && (
 				<div data-tina-field={tinaField(data, 'pubDate')} class="text-sm text-muted-foreground">
 					<FormattedDate date={new Date(data.pubDate)} />
