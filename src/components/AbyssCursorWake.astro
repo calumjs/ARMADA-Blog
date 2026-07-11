@@ -1,0 +1,249 @@
+---
+// AbyssCursorWake — bioluminescent cursor wake for the abyss theme (#197).
+//
+// A faint trail of small teal/violet motes follows the cursor, but ONLY while
+// the "Davy Jones' Locker" theme is active (documentElement[data-theme="abyss"],
+// applied by BaseHead.astro / ThemeToggle.astro). A MutationObserver on the
+// data-theme attribute attaches/detaches the effect live on theme change — no
+// reload needed — so it has zero impact on every other theme.
+//
+// Ground rules honoured here:
+// - Canvas overlay is pointer-events:none and aria-hidden — purely decorative,
+//   never intercepts input or reaches the accessibility tree.
+// - Fully disabled under prefers-reduced-motion and on touch-only devices
+//   (no fine/hover pointer); both media queries are re-checked live.
+// - Spawning is throttled to <= ~30 motes/s and the particle pool is capped;
+//   the rAF loop only runs while motes are alive, so a still cursor costs
+//   zero work per frame.
+// - pointermove/scroll/resize listeners are passive; spawning is skipped for a
+//   short window around scrolling so the wake never adds scroll jank.
+// - Script is guarded by a window flag and re-binds its canvas on
+//   astro:after-swap, surviving ClientRouter route swaps and Tina re-renders
+//   (same convention as KrakenEasterEgg / HoistTheColours / ThemeToggle).
+// - No dependencies, no backend, no audio.
+---
+
+<canvas id="abyss-cursor-wake" class="abyss-cursor-wake" aria-hidden="true" hidden></canvas>
+
+<style>
+	.abyss-cursor-wake {
+		position: fixed;
+		inset: 0;
+		width: 100vw;
+		height: 100vh;
+		/* Decorative overlay: never blocks clicks, selection or scrolling. */
+		pointer-events: none;
+		/* Above page content, below the interactive chrome/easter-egg overlays
+		   (bottle is 40, hoisted colours 9990, kraken 9999). */
+		z-index: 9950;
+	}
+	.abyss-cursor-wake[hidden] {
+		display: none;
+	}
+</style>
+
+<script is:inline>
+	// Delegated + window-guarded so the effect survives Astro ClientRouter DOM
+	// swaps and Tina visual-editor re-renders without double-binding.
+	if (!window.__abyssCursorWakeBound) {
+		window.__abyssCursorWakeBound = true;
+
+		(function () {
+			var MAX_PARTICLES = 90; // hard cap on the pool
+			var SPAWN_INTERVAL_MS = 34; // <= ~30 spawns/s
+			var SCROLL_QUIET_MS = 140; // skip spawning this long after a scroll
+			var TEAL = [178, 88, 64]; // h, s%, l% — mirrors the abyss --primary
+			var VIOLET = [285, 70, 68]; // mirrors the abyss --accent
+
+			var canvas = null;
+			var ctx = null;
+			var attached = false;
+			var rafId = 0;
+			var particles = [];
+			var lastSpawn = 0;
+			var lastScroll = 0;
+			var lastFrame = 0;
+
+			var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+			// Touch-only devices have no fine pointer and no hover.
+			var finePointer = window.matchMedia('(any-pointer: fine)');
+
+			function themeIsAbyss() {
+				return document.documentElement.getAttribute('data-theme') === 'abyss';
+			}
+
+			function shouldRun() {
+				return themeIsAbyss() && !reducedMotion.matches && finePointer.matches;
+			}
+
+			function sizeCanvas() {
+				if (!canvas || !ctx) return;
+				var dpr = Math.min(window.devicePixelRatio || 1, 2);
+				canvas.width = Math.round(window.innerWidth * dpr);
+				canvas.height = Math.round(window.innerHeight * dpr);
+				ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			}
+
+			function spawn(x, y) {
+				var now = performance.now();
+				if (now - lastSpawn < SPAWN_INTERVAL_MS) return;
+				if (now - lastScroll < SCROLL_QUIET_MS) return;
+				if (particles.length >= MAX_PARTICLES) return;
+				lastSpawn = now;
+
+				var c = Math.random() < 0.62 ? TEAL : VIOLET;
+				particles.push({
+					x: x + (Math.random() - 0.5) * 10,
+					y: y + (Math.random() - 0.5) * 10,
+					// Gentle drift, biased upward like rising plankton.
+					vx: (Math.random() - 0.5) * 14,
+					vy: -6 - Math.random() * 16,
+					r: 1 + Math.random() * 2.2,
+					life: 0,
+					ttl: 700 + Math.random() * 700, // ms
+					hue: c[0],
+					sat: c[1],
+					lum: c[2],
+				});
+				if (!rafId) {
+					lastFrame = now;
+					rafId = requestAnimationFrame(frame);
+				}
+			}
+
+			function frame(now) {
+				rafId = 0;
+				if (!ctx || !canvas) return;
+				var dt = Math.min(now - lastFrame, 64) / 1000;
+				lastFrame = now;
+
+				ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+				ctx.globalCompositeOperation = 'lighter';
+
+				var alive = [];
+				for (var i = 0; i < particles.length; i++) {
+					var p = particles[i];
+					p.life += dt * 1000;
+					if (p.life >= p.ttl) continue;
+					p.x += p.vx * dt;
+					p.y += p.vy * dt;
+
+					var t = p.life / p.ttl;
+					var fade = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+					var radius = p.r * (1 - t * 0.45);
+
+					// Soft halo + bright core = cheap bioluminescent glow.
+					ctx.fillStyle =
+						'hsla(' + p.hue + ',' + p.sat + '%,' + p.lum + '%,' + (0.1 * fade).toFixed(3) + ')';
+					ctx.beginPath();
+					ctx.arc(p.x, p.y, radius * 3, 0, Math.PI * 2);
+					ctx.fill();
+
+					ctx.fillStyle =
+						'hsla(' + p.hue + ',' + p.sat + '%,' + Math.min(p.lum + 14, 92) + '%,' + (0.55 * fade).toFixed(3) + ')';
+					ctx.beginPath();
+					ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+					ctx.fill();
+
+					alive.push(p);
+				}
+				particles = alive;
+
+				if (particles.length > 0) {
+					rafId = requestAnimationFrame(frame);
+				} else {
+					// Idle: last clear already happened above; do zero work until
+					// the next pointermove spawns a mote.
+					ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+				}
+			}
+
+			function onPointerMove(e) {
+				// pointermove only fires with clientX/Y for real pointers; ignore
+				// synthetic touch-derived moves outright.
+				if (e.pointerType === 'touch') return;
+				spawn(e.clientX, e.clientY);
+			}
+
+			function onScroll() {
+				lastScroll = performance.now();
+			}
+
+			function onVisibility() {
+				if (document.hidden) dropWork();
+			}
+
+			// Stop rendering and clear the pool without detaching listeners.
+			function dropWork() {
+				if (rafId) {
+					cancelAnimationFrame(rafId);
+					rafId = 0;
+				}
+				particles = [];
+				if (ctx && canvas) ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+			}
+
+			function attach() {
+				if (attached) return;
+				canvas = document.getElementById('abyss-cursor-wake');
+				if (!canvas) return;
+				ctx = canvas.getContext('2d');
+				if (!ctx) return;
+				attached = true;
+				canvas.hidden = false;
+				sizeCanvas();
+				window.addEventListener('pointermove', onPointerMove, { passive: true });
+				window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+				window.addEventListener('resize', sizeCanvas, { passive: true });
+				document.addEventListener('visibilitychange', onVisibility);
+			}
+
+			function detach() {
+				if (!attached) return;
+				attached = false;
+				window.removeEventListener('pointermove', onPointerMove);
+				window.removeEventListener('scroll', onScroll, { capture: true });
+				window.removeEventListener('resize', sizeCanvas);
+				document.removeEventListener('visibilitychange', onVisibility);
+				dropWork();
+				if (canvas) canvas.hidden = true;
+				canvas = null;
+				ctx = null;
+			}
+
+			function evaluate() {
+				if (shouldRun()) attach();
+				else detach();
+			}
+
+			// Live attach/detach on theme change — the single source of truth is
+			// the data-theme attribute BaseHead/ThemeToggle maintain.
+			new MutationObserver(evaluate).observe(document.documentElement, {
+				attributes: true,
+				attributeFilter: ['data-theme'],
+			});
+
+			// Re-evaluate when the OS motion preference changes mid-session.
+			if (typeof reducedMotion.addEventListener === 'function') {
+				reducedMotion.addEventListener('change', evaluate);
+				finePointer.addEventListener('change', evaluate);
+			}
+
+			// ClientRouter replaces the <body> (and this canvas) on navigation:
+			// rebind to the freshly-rendered element.
+			document.addEventListener('astro:after-swap', function () {
+				attached = false; // old canvas is gone; force a clean re-attach
+				if (rafId) {
+					cancelAnimationFrame(rafId);
+					rafId = 0;
+				}
+				particles = [];
+				canvas = null;
+				ctx = null;
+				evaluate();
+			});
+
+			evaluate();
+		})();
+	}
+</script>
