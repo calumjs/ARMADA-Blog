@@ -209,6 +209,12 @@
 		// keeps working; the hero/nav/icons live outside `.prose` and are never
 		// touched. Safe to call repeatedly (load, swaps, Tina re-renders).
 		function lightboxEnhance() {
+			// Only arm images on pages that actually mount the lightbox overlay
+			// (the BlogPost layout). `.prose` is also used by landing-page blocks
+			// (Content/Split), and this once-bound script keeps running after
+			// ClientRouter swaps to those pages — without the overlay, armed
+			// images would be keyboard-focusable buttons that do nothing.
+			if (!document.getElementById('lightbox-overlay')) return;
 			var imgs = document.querySelectorAll('.prose img');
 			for (var i = 0; i < imgs.length; i++) {
 				var img = imgs[i];
@@ -320,12 +326,16 @@
 				return;
 			}
 
-			if (ev.key === '/') {
-				// Keep the spyglass search shut while the lightbox is open — its
-				// handler honours defaultPrevented.
+			if (ev.key === '/' || ev.key === '?') {
+				// Keep the spyglass search (`/`) and ship's manual (`?`) shut while
+				// the lightbox is open — their openers honour defaultPrevented.
 				ev.preventDefault();
 			}
-		});
+		}, true);
+		// ^ capture phase: guarantees this handler runs before the search's and
+		// manual's bubble-phase openers regardless of listener registration
+		// order, which varies with the navigation path (their once-bound
+		// listeners may predate this one after a ClientRouter swap).
 
 		// Close before a ClientRouter swap so the incoming page starts clean;
 		// the scroll lock is cleared here too (the <html> element persists).
