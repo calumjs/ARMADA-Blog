@@ -5,6 +5,7 @@ import Footer from '../components/Footer.astro';
 import KrakenEasterEgg from '../components/KrakenEasterEgg.astro';
 import HoistTheColours from '../components/HoistTheColours.astro';
 import MessageInABottle from '../components/MessageInABottle.astro';
+import SpyglassSearch from '../components/SpyglassSearch.astro';
 import OceanHero from '../components/hero/OceanHero.astro';
 import TinaIsland from '@tinacms/astro/TinaIsland.astro';
 import { getConfig } from '../lib/data';
@@ -39,6 +40,7 @@ const config = (await getConfig()).data?.config ?? null;
 		<KrakenEasterEgg />
 		<HoistTheColours />
 		<MessageInABottle />
+		<SpyglassSearch />
 	</body>
 </html>
 
