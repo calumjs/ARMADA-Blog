@@ -2,13 +2,16 @@
 import TinaMarkdown from '@tinacms/astro/TinaMarkdown.astro';
 import { tinaField } from '@tinacms/astro/tina-field';
 import type { CmsBlog } from '../../lib/data';
+import { readingTimeMinutes } from '../../lib/reading-time';
 import FormattedDate from '../FormattedDate.astro';
+import ReadingTime from '../ReadingTime.astro';
 
 interface Props {
 	data?: CmsBlog | null;
 }
 
 const { data } = Astro.props;
+const minutes = data?.body ? readingTimeMinutes(data.body) : null;
 ---
 {data?.heroImage && (
 	<div data-tina-field={tinaField(data, 'heroImage')} class="mx-auto max-w-4xl px-6">
@@ -27,6 +30,11 @@ const { data } = Astro.props;
 				</div>
 			)}
 			{data.title && <h1 data-tina-field={tinaField(data, 'title')} class="mt-2 text-4xl font-semibold tracking-tight lg:text-5xl">{data.title}</h1>}
+			{minutes !== null && (
+				<div class="mt-3 flex justify-center">
+					<ReadingTime minutes={minutes} />
+				</div>
+			)}
 		</div>
 		{data.body && (
 			<div data-tina-field={tinaField(data, 'body')} class="prose prose-lg max-w-none">
