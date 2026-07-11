@@ -1,6 +1,7 @@
 ---
 import { Icon } from 'astro-icon/components';
 import Base from './Base.astro';
+import CarvePlank from '../components/CarvePlank.astro';
 import VoyageProgress from '../components/VoyageProgress.astro';
 
 interface Props {
@@ -23,6 +24,7 @@ const linkedInShareURL = `https://www.linkedin.com/sharing/share-offsite/?url=${
 
 <Base title={title} description={description} image={heroImage ?? undefined}>
 	<VoyageProgress />
+	<CarvePlank title={title} url={canonicalURL.href} />
 	<div class="mx-auto max-w-4xl px-6 pt-8">
 		<a
 			href="/blog"
