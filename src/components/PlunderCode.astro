@@ -1,0 +1,247 @@
+---
+// PlunderCode — "plunder this code" copy buttons on post code blocks (#208).
+//
+// Every fenced code block in a post body (`<pre><code>` inside the `.prose`
+// block rendered by BlogBody) gets a small "Plunder 📋" button pinned to its
+// top-right corner. Clicking it copies the block's raw text to the clipboard
+// via navigator.clipboard.writeText only, then flashes "Plundered! ⚓" briefly.
+// No canvas, no network, no dependencies.
+//
+// Rendered ONLY by the BlogPost layout, so it exists on post body pages alone;
+// the delegated script no-ops when no `.prose` code blocks are present after a
+// ClientRouter swap to another page. The listeners are bound once to
+// document/window and guarded by a window flag so they survive Astro
+// ClientRouter swaps and Tina re-renders (same convention as CarvePlank.astro
+// / VoyageProgress.astro).
+//
+// Behaviour notes:
+// - Buttons attach on first load, on astro:page-load AND astro:after-swap,
+//   and after Tina visual-editor re-renders (a rAF-debounced MutationObserver
+//   re-runs the idempotent attach). Each <pre> is wrapped at most once —
+//   re-entering a post never duplicates buttons.
+// - Native <button type="button"> with an aria-label, so it is keyboard
+//   accessible out of the box (Tab + Enter/Space); a polite live region
+//   announces the confirmation to screen readers without moving focus.
+// - Every colour comes from the existing theme CSS variables, so the button
+//   reads correctly in all five themes (light / dark / storm / tropical /
+//   abyss).
+// - Degrades silently when the clipboard API is unavailable (e.g. insecure
+//   context): no buttons are attached at all, nothing errors.
+// - Hidden in print — the print stylesheet already reflows code blocks.
+---
+
+<!-- Announces the copy confirmation to screen readers without moving focus. -->
+<span id="plunder-code-status" class="sr-only" role="status" aria-live="polite"
+></span>
+
+<style is:global>
+	/* Global (not scoped) because the wrapper + button are created by the
+	   script below, so Astro's scoped-style attributes would never match. */
+	.plunder-wrap {
+		position: relative;
+	}
+
+	.plunder-btn {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.25rem 0.625rem;
+		border-radius: var(--radius-sm);
+		/* Theme-variable chrome so the button stays visible on the --muted
+		   pre background in all five themes. */
+		border: 1px solid var(--border);
+		background: color-mix(in oklch, var(--background) 88%, var(--foreground));
+		color: var(--foreground);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.2;
+		letter-spacing: 0.01em;
+		white-space: nowrap;
+		cursor: pointer;
+		user-select: none;
+		-webkit-user-select: none;
+		box-shadow: 0 1px 4px color-mix(in oklch, var(--foreground) 18%, transparent);
+		transition: background-color 120ms ease, border-color 120ms ease,
+			transform 120ms ease;
+	}
+
+	.plunder-btn:hover {
+		border-color: var(--primary);
+		background: var(--background);
+		transform: translateY(-1px);
+	}
+
+	.plunder-btn:focus-visible {
+		outline: 2px solid var(--primary);
+		outline-offset: 2px;
+	}
+
+	.plunder-btn.is-plundered {
+		background: var(--primary);
+		border-color: var(--primary);
+		color: var(--primary-foreground);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.plunder-btn {
+			transition: none;
+		}
+		.plunder-btn:hover {
+			transform: none;
+		}
+	}
+
+	@media print {
+		.plunder-btn {
+			display: none !important;
+		}
+	}
+</style>
+
+<style>
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+</style>
+
+<script is:inline>
+	// Bind once to document/window so the buttons survive Astro ClientRouter
+	// swaps and Tina re-renders (same convention as CarvePlank.astro).
+	// Every callback re-queries the DOM and no-ops on non-post pages.
+	if (!window.__plunderCodeBound) {
+		window.__plunderCodeBound = true;
+
+		var PLUNDER_FLASH_MS = 1400;
+		var plunderRaf = 0;
+
+		function plunderClipboardOk() {
+			return !!(navigator.clipboard && navigator.clipboard.writeText);
+		}
+
+		// Idempotent: wraps each post-body <pre><code> block once and pins a
+		// copy button to it. Safe to call repeatedly (load, swaps, re-renders).
+		function plunderAttach() {
+			// No clipboard API (e.g. insecure context) — degrade silently by
+			// never attaching any buttons.
+			if (!plunderClipboardOk()) return;
+
+			var codes = document.querySelectorAll('.prose pre > code');
+			for (var i = 0; i < codes.length; i++) {
+				var pre = codes[i].parentElement;
+				if (!pre || pre.closest('.plunder-wrap')) continue; // already armed
+
+				var wrap = document.createElement('div');
+				wrap.className = 'plunder-wrap';
+				var parent = pre.parentNode;
+				if (!parent) continue;
+				parent.insertBefore(wrap, pre);
+				wrap.appendChild(pre);
+
+				var btn = document.createElement('button');
+				btn.type = 'button';
+				btn.className = 'plunder-btn';
+				btn.setAttribute(
+					'aria-label',
+					'Plunder this code — copy it to the clipboard'
+				);
+
+				var label = document.createElement('span');
+				label.className = 'plunder-label';
+				label.textContent = 'Plunder 📋';
+
+				var done = document.createElement('span');
+				done.className = 'plunder-done';
+				done.textContent = 'Plundered! ⚓';
+				done.hidden = true;
+
+				btn.appendChild(label);
+				btn.appendChild(done);
+				wrap.appendChild(btn);
+			}
+		}
+
+		function plunderSchedule() {
+			if (plunderRaf) return;
+			plunderRaf = window.requestAnimationFrame(function () {
+				plunderRaf = 0;
+				plunderAttach();
+			});
+		}
+
+		function plunderReset(btn) {
+			btn.classList.remove('is-plundered');
+			var label = btn.querySelector('.plunder-label');
+			var done = btn.querySelector('.plunder-done');
+			if (label) label.hidden = false;
+			if (done) done.hidden = true;
+		}
+
+		function plunderFlash(btn) {
+			btn.classList.add('is-plundered');
+			var label = btn.querySelector('.plunder-label');
+			var done = btn.querySelector('.plunder-done');
+			if (label) label.hidden = true;
+			if (done) done.hidden = false;
+
+			var status = document.getElementById('plunder-code-status');
+			if (status) status.textContent = 'Code copied to clipboard';
+
+			if (btn.__plunderTimer) clearTimeout(btn.__plunderTimer);
+			btn.__plunderTimer = window.setTimeout(function () {
+				btn.__plunderTimer = 0;
+				plunderReset(btn);
+				var s = document.getElementById('plunder-code-status');
+				if (s) s.textContent = '';
+			}, PLUNDER_FLASH_MS);
+		}
+
+		// Delegated so clicks keep working on buttons attached after swaps.
+		document.addEventListener('click', function (e) {
+			var t = e.target;
+			var btn = t && t.closest ? t.closest('.plunder-btn') : null;
+			if (!btn) return;
+
+			var wrap = btn.closest('.plunder-wrap');
+			var code = wrap ? wrap.querySelector('pre > code') : null;
+			if (!code || !plunderClipboardOk()) return;
+
+			navigator.clipboard.writeText(code.textContent || '').then(
+				function () {
+					plunderFlash(btn);
+				},
+				function () {
+					// Clipboard permission refused — degrade silently.
+				}
+			);
+		});
+
+		// Attach on first load AND after every ClientRouter swap, once the new
+		// page's DOM is in place. plunderAttach is idempotent, so re-entering a
+		// post never duplicates buttons.
+		document.addEventListener('astro:page-load', plunderSchedule);
+		document.addEventListener('astro:after-swap', plunderSchedule);
+
+		// Tina's visual editor re-renders the post body in place (no swap
+		// event) — a debounced observer re-arms fresh code blocks. Observing
+		// the root element (not <body>) keeps it alive across body swaps; the
+		// idempotent attach means our own insertions settle immediately.
+		new MutationObserver(plunderSchedule).observe(document.documentElement, {
+			childList: true,
+			subtree: true,
+		});
+
+		plunderSchedule();
+	}
+</script>
