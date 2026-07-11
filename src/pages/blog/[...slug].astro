@@ -7,6 +7,7 @@ import { getBlog, listBlogs } from '../../lib/data';
 import { islands } from '../../lib/islands';
 import { pickNearbyIslands } from '../../lib/related-posts';
 import { readingTimeMinutes } from '../../lib/reading-time';
+import { extractToc } from '../../lib/toc';
 
 export async function getStaticPaths() {
 	const posts = await listBlogs();
@@ -30,6 +31,9 @@ const layoutProps = {
 	heroImage: data.heroImage ?? null,
 	// Same estimate BlogBody renders on screen — reused for the print header line.
 	readingMinutes: data.body ? readingTimeMinutes(data.body) : null,
+	// "Chart of contents" (#213): build-time h2/h3 outline with the same slug
+	// ids DropAnchor assigns at runtime. The layout hides it below 3 headings.
+	toc: data.body ? extractToc(data.body) : [],
 };
 ---
 
