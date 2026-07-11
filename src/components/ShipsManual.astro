@@ -1,0 +1,434 @@
+---
+// ShipsManual — the keyboard-shortcuts cheat-sheet overlay ("the ship's manual").
+//
+// Press `?` anywhere outside a text field to raise a themed modal listing the
+// site's real keyboard shortcuts. The registry below (`SHORTCUTS`) is the ONE
+// place shortcuts are defined — future shortcuts get a row by adding an entry
+// here, nothing else. The footer carries a cryptic riddle that hints at the
+// Konami rite (owned by HoistTheColours.astro) without ever spelling it out.
+//
+// Accessibility: role="dialog" aria-modal="true" labelled by the title; the
+// dialog receives focus on open, Tab is trapped on the single focusable
+// control (the close button), and Escape / click-outside / the close button
+// close the manual and restore focus to whatever had it before opening.
+//
+// Listener etiquette (coordinating with the rest of the fleet):
+// - SpyglassSearch owns `/`; while the spyglass is open its input has focus,
+//   so our typing-target guard means `?` can never stack the manual on top.
+// - Pressing `/` while the manual is open closes the manual WITHOUT
+//   preventDefault, handing the keystroke to the spyglass listener so search
+//   opens cleanly — never two modals at once. Our keydown listener runs in
+//   the CAPTURE phase so the hand-off happens before the spyglass (bubble
+//   phase) sees the event.
+// - HoistTheColours owns the Konami code and KrakenEasterEgg the typed word;
+//   neither preventDefaults, and `?` is part of neither sequence.
+//
+// The listeners are delegated from `document` behind a `window.__shipsManualBound`
+// guard with all element lookups by id at call time — the same convention as
+// SpyglassSearch / ThemeToggle — so the manual keeps working across Astro
+// ClientRouter swaps (astro:after-swap) and Tina re-renders. All theming uses
+// the global CSS variables, so the overlay follows all five themes
+// (light / dark / storm / tropical / abyss) with no per-theme styling here.
+// Reduced motion disables the pop animation and backdrop blur. No dependencies.
+
+// ── The ship's shortcut registry ─────────────────────────────────────────────
+// THE single source of truth for the site's keyboard shortcuts. Add future
+// shortcuts here and only here; the overlay renders straight from this list.
+const SHORTCUTS: { keys: string[]; label: string; description: string }[] = [
+	{
+		keys: ['/'],
+		label: 'Raise the spyglass',
+		description: 'Search the charts for a post.',
+	},
+	{
+		keys: ['?'],
+		label: "Open the ship's manual",
+		description: 'This very cheat-sheet. Press again to stow it.',
+	},
+	{
+		keys: ['Esc'],
+		label: 'Belay that',
+		description: 'Close whichever overlay is open.',
+	},
+];
+
+// Cryptic footer legend hinting at the Konami rite — never spelled out.
+const RIDDLE =
+	'Rumour below decks speaks of an old rite: gaze aloft twice, plumb the ' +
+	'deeps twice, roll to port and starboard, port and starboard again — ' +
+	'then bravo, sailor, answer aye… and hidden colours shall fly.';
+---
+
+<div id="ships-manual-overlay" class="ships-manual-overlay" hidden>
+	<div class="ships-manual-backdrop" data-ships-manual-backdrop></div>
+	<div
+		id="ships-manual-dialog"
+		class="ships-manual-dialog"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="ships-manual-title"
+		tabindex="-1"
+	>
+		<div class="ships-manual-header">
+			<h2 id="ships-manual-title" class="ships-manual-title">The Ship&rsquo;s Manual</h2>
+			<button
+				id="ships-manual-close"
+				type="button"
+				class="ships-manual-close"
+				aria-label="Close the manual (Escape)"
+			>
+				<kbd class="ships-manual-kbd">esc</kbd>
+			</button>
+		</div>
+		<p class="ships-manual-sub">Every order the helm answers to, cap&rsquo;n.</p>
+		<ul class="ships-manual-list">
+			{
+				SHORTCUTS.map((s) => (
+					<li class="ships-manual-row">
+						<span class="ships-manual-keys">
+							{s.keys.map((k) => (
+								<kbd class="ships-manual-kbd">{k}</kbd>
+							))}
+						</span>
+						<span class="ships-manual-what">
+							<span class="ships-manual-label">{s.label}</span>
+							<span class="ships-manual-desc">{s.description}</span>
+						</span>
+					</li>
+				))
+			}
+		</ul>
+		<p class="ships-manual-riddle">{RIDDLE}</p>
+	</div>
+</div>
+
+<style is:global>
+	.ships-manual-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 70; /* above the spyglass (60) and header (z-20), below the Kraken (9999) */
+		display: flex;
+		align-items: flex-start;
+		justify-content: center;
+		padding: clamp(1rem, 12vh, 7rem) 1rem 1rem;
+	}
+
+	.ships-manual-overlay[hidden] {
+		display: none;
+	}
+
+	.ships-manual-backdrop {
+		position: absolute;
+		inset: 0;
+		background: oklch(0.15 0.03 252 / 0.55);
+		backdrop-filter: blur(3px);
+		-webkit-backdrop-filter: blur(3px);
+	}
+
+	.ships-manual-dialog {
+		position: relative;
+		width: min(30rem, 100%);
+		max-height: min(80vh, 36rem);
+		display: flex;
+		flex-direction: column;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-lg);
+		background: var(--popover);
+		color: var(--popover-foreground);
+		box-shadow: 0 24px 64px oklch(0.15 0.04 252 / 0.45);
+		padding: 1.1rem 1.25rem 1.25rem;
+		animation: ships-manual-pop 160ms ease-out both;
+	}
+
+	.ships-manual-dialog:focus-visible {
+		outline: none;
+		box-shadow:
+			0 0 0 3px var(--ring),
+			0 24px 64px oklch(0.15 0.04 252 / 0.45);
+	}
+
+	.ships-manual-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+
+	.ships-manual-title {
+		margin: 0;
+		font-family: var(--font-serif);
+		font-size: 1.25rem;
+		font-weight: 700;
+		line-height: 1.3;
+	}
+
+	.ships-manual-sub {
+		margin: 0.25rem 0 0;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: var(--muted-foreground);
+	}
+
+	.ships-manual-close {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.25rem 0.4rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius-sm);
+		background: transparent;
+		color: var(--muted-foreground);
+		cursor: pointer;
+		transition:
+			background-color 140ms ease,
+			color 140ms ease;
+	}
+
+	.ships-manual-close:hover {
+		background: var(--accent);
+		color: var(--accent-foreground);
+	}
+
+	.ships-manual-close:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px var(--ring);
+	}
+
+	.ships-manual-list {
+		margin: 1rem 0 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.ships-manual-row {
+		display: flex;
+		align-items: baseline;
+		gap: 0.9rem;
+		padding: 0.65rem 0.15rem;
+	}
+
+	.ships-manual-row + .ships-manual-row {
+		border-top: 1px solid var(--border);
+	}
+
+	.ships-manual-keys {
+		flex-shrink: 0;
+		display: inline-flex;
+		gap: 0.3rem;
+		min-width: 3.2rem;
+	}
+
+	.ships-manual-kbd {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.6rem;
+		padding: 0.2rem 0.45rem;
+		border: 1px solid var(--border);
+		border-bottom-width: 2px;
+		border-radius: var(--radius-sm);
+		background: var(--muted);
+		color: var(--foreground);
+		font-family: var(--font-mono, ui-monospace, monospace);
+		font-size: 0.75rem;
+		letter-spacing: 0.04em;
+	}
+
+	.ships-manual-what {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+	}
+
+	.ships-manual-label {
+		font-family: var(--font-serif);
+		font-size: 0.95rem;
+		font-weight: 600;
+		line-height: 1.35;
+	}
+
+	.ships-manual-desc {
+		font-size: 0.82rem;
+		line-height: 1.45;
+		color: var(--muted-foreground);
+	}
+
+	.ships-manual-riddle {
+		margin: 1rem 0 0;
+		padding: 0.75rem 0.9rem;
+		border: 1px dashed var(--border);
+		border-radius: var(--radius-md);
+		background: var(--muted);
+		color: var(--muted-foreground);
+		font-family: var(--font-serif);
+		font-style: italic;
+		font-size: 0.82rem;
+		line-height: 1.55;
+	}
+
+	@keyframes ships-manual-pop {
+		from {
+			opacity: 0;
+			transform: scale(0.97) translateY(-8px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.ships-manual-dialog {
+			animation: none;
+		}
+		.ships-manual-backdrop {
+			backdrop-filter: none;
+			-webkit-backdrop-filter: none;
+		}
+	}
+</style>
+
+<script is:inline>
+	// Bind once and delegate from document so the manual survives Astro
+	// ClientRouter swaps (astro:after-swap) and Tina re-renders — same
+	// convention as SpyglassSearch.astro. Element lookups happen at call time
+	// by id, so freshly swapped-in DOM keeps working.
+	if (!window.__shipsManualBound) {
+		window.__shipsManualBound = true;
+
+		var shipsManualLastFocus = null;
+
+		function shipsManualEls() {
+			return {
+				overlay: document.getElementById('ships-manual-overlay'),
+				dialog: document.getElementById('ships-manual-dialog'),
+				close: document.getElementById('ships-manual-close'),
+			};
+		}
+
+		function shipsManualIsOpen() {
+			var overlay = document.getElementById('ships-manual-overlay');
+			return !!overlay && !overlay.hidden;
+		}
+
+		// Mirror the spyglass guard: never fire while typing in a form field.
+		function shipsManualIsTypingTarget(target) {
+			if (!target || !target.closest) return false;
+			if (target.isContentEditable) return true;
+			return !!target.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+		}
+
+		// True when another full-screen overlay already holds the deck — the
+		// spyglass (its input focus already guards us, but be explicit) or the
+		// kraken. The manual never stacks on top of them.
+		function shipsManualDeckBusy() {
+			var spyglass = document.getElementById('spyglass-overlay');
+			if (spyglass && !spyglass.hidden) return true;
+			var kraken = document.getElementById('kraken-overlay');
+			if (kraken && !kraken.hidden) return true;
+			return false;
+		}
+
+		function shipsManualOpen() {
+			var e = shipsManualEls();
+			if (!e.overlay || !e.dialog || shipsManualIsOpen()) return;
+			shipsManualLastFocus = document.activeElement;
+			e.overlay.hidden = false;
+			document.documentElement.style.overflow = 'hidden'; // lock scroll behind the modal
+			e.dialog.focus();
+		}
+
+		function shipsManualClose(restoreFocus) {
+			var e = shipsManualEls();
+			if (!e.overlay || e.overlay.hidden) return;
+			e.overlay.hidden = true;
+			document.documentElement.style.overflow = '';
+			if (restoreFocus !== false && shipsManualLastFocus && document.contains(shipsManualLastFocus)) {
+				try {
+					shipsManualLastFocus.focus();
+				} catch (err) {}
+			}
+			shipsManualLastFocus = null;
+		}
+
+		// Capture phase so that, when the manual is open, we can coordinate
+		// BEFORE the spyglass's bubble-phase listener sees the keystroke.
+		document.addEventListener(
+			'keydown',
+			function (ev) {
+				if (!shipsManualIsOpen()) {
+					// `?` outside inputs opens the manual (Shift is what typed the
+					// `?` on most layouts, so only Ctrl/Meta/Alt disqualify).
+					if (
+						ev.key === '?' &&
+						!ev.ctrlKey && !ev.metaKey && !ev.altKey &&
+						!ev.defaultPrevented &&
+						!shipsManualIsTypingTarget(ev.target) &&
+						!shipsManualDeckBusy()
+					) {
+						ev.preventDefault();
+						shipsManualOpen();
+					}
+					return;
+				}
+
+				if (ev.key === 'Escape') {
+					ev.preventDefault();
+					shipsManualClose(true);
+					return;
+				}
+
+				// `?` again stows the manual.
+				if (ev.key === '?' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+					ev.preventDefault();
+					shipsManualClose(true);
+					return;
+				}
+
+				// `/` hands off to the spyglass: close the manual WITHOUT
+				// preventDefault so SpyglassSearch's own listener (bubble phase,
+				// after this one) opens the search — never two modals at once.
+				if (ev.key === '/' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+					shipsManualClose(false);
+					return;
+				}
+
+				if (ev.key === 'Tab') {
+					// Trap focus: the close button is the manual's only focusable
+					// control, so focus cycles onto it and never leaves the dialog.
+					var e = shipsManualEls();
+					if (!e.close) return;
+					ev.preventDefault();
+					e.close.focus();
+				}
+			},
+			true
+		);
+
+		document.addEventListener('click', function (ev) {
+			if (!shipsManualIsOpen()) return;
+			var t = ev.target;
+			if (!t || !t.closest) return;
+			if (t.closest('#ships-manual-close')) {
+				shipsManualClose(true);
+				return;
+			}
+			// Click anywhere outside the dialog (the backdrop) closes.
+			if (!t.closest('#ships-manual-dialog')) {
+				shipsManualClose(true);
+			}
+		});
+
+		// Close before a ClientRouter swap so the incoming page starts clean;
+		// the scroll lock is cleared here too (the <html> element persists).
+		document.addEventListener('astro:before-swap', function () {
+			shipsManualClose(false);
+		});
+	}
+</script>

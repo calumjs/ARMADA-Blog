@@ -8,6 +8,7 @@ import MessageInABottle from '../components/MessageInABottle.astro';
 import SpyglassSearch from '../components/SpyglassSearch.astro';
 import CaptainsWheel from '../components/CaptainsWheel.astro';
 import AbyssCursorWake from '../components/AbyssCursorWake.astro';
+import ShipsManual from '../components/ShipsManual.astro';
 import OceanHero from '../components/hero/OceanHero.astro';
 import TinaIsland from '@tinacms/astro/TinaIsland.astro';
 import { getConfig } from '../lib/data';
@@ -45,6 +46,7 @@ const config = (await getConfig()).data?.config ?? null;
 		<SpyglassSearch />
 		<CaptainsWheel />
 		<AbyssCursorWake />
+		<ShipsManual />
 	</body>
 </html>
 
