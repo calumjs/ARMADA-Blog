@@ -4,6 +4,7 @@ import { Icon } from 'astro-icon/components';
 import type { CmsConfig, CmsConfigContactLink } from '../lib/data';
 import IconLink from "./IconLink.astro";
 import Starfield from './space/Starfield.astro';
+import TideClock from './TideClock.astro';
 
 interface Props {
 	config?: CmsConfig | null;
@@ -40,6 +41,7 @@ const today = new Date();
 			&copy; {today.getFullYear()}
 			<span data-tina-field={seo ? tinaField(seo, "siteOwner") : undefined}>{seo?.siteOwner}</span>. All rights reserved.
 		</p>
+		<TideClock />
 		<a
 			href="https://github.com/calumjs/ARMADA"
 			target="_blank"
